@@ -115,6 +115,31 @@ table.qtbl { min-width: 520px; }
 .addrow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
 @media (max-width: 640px) { .addrow { grid-template-columns: 1fr; } }
 .check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+/* Traffic-light status: strong solid colours so on-target / close / below read at a glance */
+:root { --good-solid: #1f7a45; --warn-solid: #f29d12; --bad-solid: #cf2e25; --good-bg: #e3f3e9; --warn-bg: #fdf0d9; --bad-bg: #fbe4e2; --on-warn: #2b1a00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --good-solid: #2f9e5b; --warn-solid: #f2a52a; --bad-solid: #e0473d; --good-bg: #13291c; --warn-bg: #33250d; --bad-bg: #351816; } }
+:root[data-theme="dark"] { --good-solid: #2f9e5b; --warn-solid: #f2a52a; --bad-solid: #e0473d; --good-bg: #13291c; --warn-bg: #33250d; --bad-bg: #351816; }
+.pill { border: 0; padding: 3px 10px; font-weight: 600; font-size: 12.5px; min-width: 58px; text-align: center; }
+.pill.good { background: var(--good-solid); color: #fff; } .pill.warn { background: var(--warn-solid); color: var(--on-warn); } .pill.bad { background: var(--bad-solid); color: #fff; }
+.tile:has(.v.good) { background: var(--good-bg); box-shadow: inset 5px 0 0 var(--good-solid); }
+.tile:has(.v.warn) { background: var(--warn-bg); box-shadow: inset 5px 0 0 var(--warn-solid); }
+.tile:has(.v.bad) { background: var(--bad-bg); box-shadow: inset 5px 0 0 var(--bad-solid); }
+.tile .v.good, .tile .v.warn, .tile .v.bad { color: var(--ink); }
+.tile:has(.v.good) .k::after, .tile:has(.v.warn) .k::after, .tile:has(.v.bad) .k::after { display: table; margin-top: 8px; white-space: nowrap; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; vertical-align: 1px; }
+.tile:has(.v.good) .k::after { content: "On target"; background: var(--good-solid); color: #fff; }
+.tile:has(.v.warn) .k::after { content: "Close"; background: var(--warn-solid); color: var(--on-warn); }
+.tile:has(.v.bad) .k::after { content: "Below target"; background: var(--bad-solid); color: #fff; }
+.chart .bar.good, .chart .bar.warn, .chart .bar.bad { opacity: 1; }
+.chart .bar.good { fill: var(--good-solid); } .chart .bar.warn { fill: var(--warn-solid); } .chart .bar.bad { fill: var(--bad-solid); }
+.chart .bar.sel { opacity: 1; }
+.chart .axis.on { fill: var(--ink); font-weight: 700; }
+.chart .vin { fill: #fff; font-family: var(--mono); font-size: 12px; font-weight: 700; } .chart .vin.warn { fill: var(--on-warn); }
+.chart .target { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .7; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); align-items: center; }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.key i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.key i.good { background: var(--good-solid); } .key i.warn { background: var(--warn-solid); } .key i.bad { background: var(--bad-solid); }
+.key b { font-weight: 600; color: var(--ink); }
 @media (prefers-reduced-motion: no-preference) { .chart .bar { transition: opacity .15s; } }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
@@ -472,9 +497,9 @@ function qualityView(el, D) {
   const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} };
   // Each client measures quality at a different point: Modern Milkman at the 4th weekly delivery, HelloFresh at the 2nd box.
   const SRC = {
-    mm: { name: 'Modern Milkman', rows: D.q4 || [], mem: m => m.q4, b: 'fourth', band: v => v == null ? '' : v >= 70 ? 'good' : v >= 60 ? 'warn' : 'bad', rateT: '4th delivery rate', bT: 'Still on in week 4', bS: 'Took a 4th week delivery', aS: 'Took a 1st week delivery', dS: 'No delivery in week 4',
+    mm: { name: 'Modern Milkman', rows: D.q4 || [], mem: m => m.q4, b: 'fourth', band: v => v == null ? '' : v >= 70 ? 'good' : v >= 60 ? 'warn' : 'bad', goal: 70, key: ['70%+', '60–69%', 'Below 60%'], rateT: '4th delivery rate', bT: 'Still on in week 4', bS: 'Took a 4th week delivery', aS: 'Took a 1st week delivery', dS: 'No delivery in week 4',
           note: 'Modern Milkman: of the customers signed up in a week, how many still took a delivery in their 4th week.' },
-    hf: { name: 'HelloFresh', rows: D.hf2 || [], mem: m => m.hf2, b: 'second', band: v => v == null ? '' : v >= 70 ? 'good' : v >= 65 ? 'warn' : 'bad', rateT: '2nd box rate', bT: 'Got a 2nd box', bS: 'Took their 2nd box', aS: 'Got a 1st box', dS: 'No 2nd box',
+    hf: { name: 'HelloFresh', rows: D.hf2 || [], mem: m => m.hf2, b: 'second', band: v => v == null ? '' : v >= 70 ? 'good' : v >= 65 ? 'warn' : 'bad', goal: 70, key: ['70%+', '65–69%', 'Below 65%'], rateT: '2nd box rate', bT: 'Got a 2nd box', bS: 'Took their 2nd box', aS: 'Got a 1st box', dS: 'No 2nd box',
           note: 'HelloFresh: of the customers signed up in a week, how many went on to take their 2nd box. The latest weeks can still rise while 2nd boxes go out.' },
   };
   const have = Object.keys(SRC).filter(k => SRC[k].rows.some(q => q.first > 0));
@@ -493,6 +518,7 @@ function qualityView(el, D) {
     <div class="sec-head"><h2>Customer quality</h2>
       <div class="qctl">${have.length > 1 ? `<div class="seg" role="group" aria-label="Client">${have.map(k => `<button data-c="${k}">${SRC[k].name}</button>`).join('')}</div>` : ''}<div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
       <select aria-label="Period"></select></div></div>
+    <div class="key" data-q="key"></div>
     <div class="tiles" data-q="tiles"></div>
     <p class="note" data-q="note"></p></section>
   <div class="chart"><h3 data-q="ctitle"></h3><div data-q="chart"></div></div>
@@ -508,6 +534,7 @@ function qualityView(el, D) {
     el.querySelectorAll('[data-m]').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === mode));
     el.querySelectorAll('[data-c]').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === client));
     $q('note').textContent = S.note + ' Monthly adds up the sign-up weeks that end in that month.';
+    $q('key').innerHTML = `<b>${S.rateT}:</b>` + ['good', 'warn', 'bad'].map((c, i) => `<span><i class="${c}"></i>${S.key[i]}</span>`).join('');
     selEl.innerHTML = ''; P.slice().reverse().forEach(p => selEl.add(new Option(p.label, p.key))); selEl.value = sel;
     draw();
   }
@@ -520,7 +547,7 @@ function qualityView(el, D) {
       <div class="tile"><div class="k">New customers</div><div class="v">${fInt(t.first)}</div><div class="s">${S.aS}</div></div>
       <div class="tile"><div class="k">${S.bT}</div><div class="v">${fInt(t[S.b])}</div><div class="s">${S.bS}</div></div>
       <div class="tile"><div class="k">Dropped off</div><div class="v">${fInt(Math.max(0, t.first - t[S.b]))}</div><div class="s">${S.dS}</div></div>`;
-    $q('ctitle').textContent = `${S.rateT} by ${mode}`;
+    $q('ctitle').textContent = `${S.rateT} by ${mode} · dashed line is the ${S.goal}% target`;
     chart($q('chart'), P.map(x => ({ key: x.key, label: x.short, full: x.label, y: rate(sum(x.weeks, we => teamQ[we])) })).map(v => ({ ...v, c: S.band(v.y) })));
     $q('ttitle').textContent = `Your team · ${p.label}`;
     table(p);
@@ -530,12 +557,14 @@ function qualityView(el, D) {
     const bw = (w - L - R) / vals.length, bwd = Math.min(bw - 4, 72), k = Math.ceil(vals.length / (w < 640 ? 4 : 8));
     let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${S.rateT} by ${mode}">`;
     for (let g = 0; g <= 100; g += 25) s += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${g}%</text>`;
+    s += `<line class="target" x1="${L}" x2="${w - R}" y1="${y(S.goal)}" y2="${y(S.goal)}"/>`;
     vals.forEach((v, i) => {
       const cx = L + i * bw + bw / 2, x = cx - bwd / 2, bh = v.y == null ? 0 : y(0) - y(v.y), r = Math.min(4, bh / 2);
       if (bh > 0) s += `<path class="bar${v.c ? ' ' + v.c : ''}${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
-      if (v.y != null && vals.length <= 12) s += `<text class="axis val" x="${cx}" y="${y(v.y) - 5}" text-anchor="middle">${Math.round(v.y)}%</text>`;
+      if (v.y != null && vals.length <= 12) s += bh > 24 ? `<text class="vin ${v.c || ''}" x="${cx}" y="${y(v.y) + 17}" text-anchor="middle">${Math.round(v.y)}%</text>`
+        : `<text class="axis val" x="${cx}" y="${y(v.y) - 5}" text-anchor="middle">${Math.round(v.y)}%</text>`;
       const lastL = i === vals.length - 1;
-      if ((i % k === 0 && vals.length - 1 - i >= k) || lastL) s += `<text class="axis" x="${lastL && k > 1 ? w - R : cx}" y="${h - 6}" text-anchor="${lastL && k > 1 ? 'end' : 'middle'}">${esc(v.label)}</text>`;
+      if ((i % k === 0 && vals.length - 1 - i >= k) || lastL) s += `<text class="axis${v.key === sel ? ' on' : ''}" x="${lastL && k > 1 ? w - R : cx}" y="${h - 6}" text-anchor="${lastL && k > 1 ? 'end' : 'middle'}">${esc(v.label)}</text>`;
       s += `<rect class="hit" x="${L + i * bw}" y="${T}" width="${bw}" height="${h - T - B}" data-i="${i}"><title>${esc(v.full)}: ${fPct(v.y)}</title></rect>`;
     });
     box.innerHTML = s + '</svg>';
@@ -546,11 +575,11 @@ function qualityView(el, D) {
       .filter(r => r.first > 0).map(r => ({ ...r, kept: r[S.b], rate: rate(r), lost: Math.max(0, r.first - r[S.b]) }));
     const others = D.members.length - rows.length;
     rows.sort((a, b) => sortKey === 'name' ? sortDir * a.name.localeCompare(b.name) : (sortDir * (a[sortKey] - b[sortKey]) || a.name.localeCompare(b.name)));
-    const cols = [{ k: 'name', t: 'Name' }, { k: 'first', t: 'New customers', n: 1 }, { k: 'kept', t: S.bT, n: 1 }, { k: 'lost', t: 'Dropped off', n: 1 }, { k: 'rate', t: S.rateT, n: 1 }];
+    const cols = [{ k: 'name', t: 'Name' }, { k: 'rate', t: S.rateT, n: 1 }, { k: 'first', t: 'New customers', n: 1 }, { k: 'kept', t: S.bT, n: 1 }, { k: 'lost', t: 'Dropped off', n: 1 }];
     const tb = el.querySelector('.qtbl');
     tb.tHead.innerHTML = '<tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
     tb.tBodies[0].innerHTML = rows.length ? rows.map(r => `<tr><td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc(r.sub)}</small></div></td>
-      <td class="n">${fInt(r.first)}</td><td class="n">${fInt(r.kept)}</td><td class="n">${fInt(r.lost)}</td><td class="n">${r.rate == null ? '–' : `<span class="pill ${S.band(r.rate)}">${fPct(r.rate)}</span>`}</td></tr>`).join('')
+      <td class="n">${r.rate == null ? '–' : `<span class="pill ${S.band(r.rate)}">${fPct(r.rate)}</span>`}</td><td class="n">${fInt(r.first)}</td><td class="n">${fInt(r.kept)}</td><td class="n">${fInt(r.lost)}</td></tr>`).join('')
       : `<tr><td colspan="5" class="dim">Nobody in this team had ${S.name} sign-ups in ${esc(p.label)}.</td></tr>`;
     tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => { if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = sortKey === 'name' ? 1 : -1; } table(p); });
     $q('tnote').textContent = others ? `${others} other ${others === 1 ? 'person has' : 'people have'} no ${S.name} sign-ups in this ${mode}.` : '';
@@ -584,9 +613,10 @@ function doorsView(el, D) {
     <div class="sec-head"><h2>Modern Milkman weekly stats</h2>
       <div class="qctl"><div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
       <select aria-label="Period"></select></div></div>
+    <div class="key"><b>Targets:</b><span>Membership above 75%</span><span>Average order above £12.50</span><span>Drop rate 2.5+</span><span><i class="good"></i>On target</span><span><i class="warn"></i>Close</span><span><i class="bad"></i>Below</span></div>
     <div class="tiles" data-q="tiles"></div>
     <p class="note">From the Modern Milkman weekly performance reports. Average order and drops are averaged over sales.</p></section>
-  <div class="charts"><div class="chart"><h3>Sales</h3><div data-q="c1"></div></div><div class="chart"><h3>Memberships on sign-up (%)</h3><div data-q="c2"></div></div></div>
+  <div class="charts"><div class="chart"><h3>Sales</h3><div data-q="c1"></div></div><div class="chart"><h3>Memberships on sign-up · dashed line is the 75% target</h3><div data-q="c2"></div></div></div>
   <section class="section"><div class="sec-head"><h2 data-q="ttitle"></h2><p class="note" data-q="tnote"></p></div>
     <div class="tablebox"><table class="qtbl"><thead></thead><tbody></tbody></table></div></section>`;
   const $q = n => el.querySelector(`[data-q="${n}"]`), selEl = el.querySelector('select');
@@ -609,21 +639,22 @@ function doorsView(el, D) {
       <div class="tile"><div class="k">Drop rate</div><div class="v ${bDrop(t.drops)}">${t.drops == null ? '–' : t.drops.toFixed(2)}</div><div class="s">Drops per sale, target 2.5+</div></div>`;
     const tots = P.map(x => ({ key: x.key, label: x.short, full: x.label, t: sum(x.weeks.map(we => byWe[we])) }));
     chart($q('c1'), tots.map(x => ({ ...x, y: x.t.sales })), fInt);
-    chart($q('c2'), tots.map(x => ({ ...x, y: x.t.mpct, c: bMem(x.t.mpct) })), v => Math.round(v) + '%');
+    chart($q('c2'), tots.map(x => ({ ...x, y: x.t.mpct, c: bMem(x.t.mpct) })), v => Math.round(v) + '%', 75);
     $q('ttitle').textContent = `Your team · ${p.label}`;
     table(p);
   }
-  function chart(box, vals, fmt) {
+  function chart(box, vals, fmt, goal) {
     const w = box.clientWidth && box.clientWidth < 420 ? 380 : 480, h = 190, L = 44, R = 6, T = 14, B = 22;
-    const max = Math.max(1e-9, ...vals.map(v => v.y || 0)), step = Math.pow(10, Math.floor(Math.log10(max)));
+    const max = Math.max(1e-9, goal || 0, ...vals.map(v => v.y || 0)), step = Math.pow(10, Math.floor(Math.log10(max)));
     const nice = [1, 2, 2.5, 5, 10].map(m => m * step).find(m => max / m <= 4) || step * 10, top = Math.ceil(max / nice) * nice;
     const y = v => T + (h - T - B) * (1 - v / top), bw = (w - L - R) / vals.length, bwd = Math.min(bw - 4, 64), k = Math.ceil(vals.length / (w < 480 ? 4 : 6));
     let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(box.previousElementSibling.textContent)} by ${mode}">`;
     for (let g = 0; g <= top + 1e-9; g += nice) s += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${fmt(g)}</text>`;
+    if (goal != null) s += `<line class="target" x1="${L}" x2="${w - R}" y1="${y(goal)}" y2="${y(goal)}"/>`;
     vals.forEach((v, i) => {
       const cx = L + i * bw + bw / 2, x = cx - bwd / 2, bh = v.y ? y(0) - y(v.y) : 0, r = Math.min(4, bh / 2), lastL = i === vals.length - 1;
       if (bh > 0) s += `<path class="bar${v.c ? ' ' + v.c : ''}${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
-      if ((i % k === 0 && vals.length - 1 - i >= k) || lastL) s += `<text class="axis" x="${lastL && k > 1 ? w - R : cx}" y="${h - 6}" text-anchor="${lastL && k > 1 ? 'end' : 'middle'}">${esc(v.label)}</text>`;
+      if ((i % k === 0 && vals.length - 1 - i >= k) || lastL) s += `<text class="axis${v.key === sel ? ' on' : ''}" x="${lastL && k > 1 ? w - R : cx}" y="${h - 6}" text-anchor="${lastL && k > 1 ? 'end' : 'middle'}">${esc(v.label)}</text>`;
       s += `<rect class="hit" x="${L + i * bw}" y="${T}" width="${bw}" height="${h - T - B}" data-i="${i}"><title>${esc(v.full)}: ${v.y == null ? '–' : fmt(v.y)}</title></rect>`;
     });
     box.innerHTML = s + '</svg>';

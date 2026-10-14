@@ -321,7 +321,7 @@ function renderTeam(D) {
       <div class="meta" data-r="meta"></div>
     </div><div class="updated" data-r="updated"></div></div>
   ${kids.length ? `<div class="subnav"><span class="note">Sub-teams:</span>${kids.map(k => `<button data-team="${esc(k.slug)}">${esc(k.name)}</button>`).join('')}</div>` : ''}
-  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Delivery quality</button></div>
+  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Quality</button></div>
   <div class="view" data-view="main">
   <section class="section"><div class="sec-head"><h2>Sales logged in Owner IQ</h2><p class="note">Live, refreshed every morning</p></div>
     <div class="tiles" data-r="liveTiles"></div></section>
@@ -459,17 +459,26 @@ function renderTeam(D) {
   draw();
 }
 
-// ---- Delivery quality page: Modern Milkman 4th-delivery exports, by week or by month
+// ---- Delivery quality page: Modern Milkman 4th-delivery and HelloFresh 2nd-box exports, by week or by month
 function qualityView(el, D) {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fInt = n => n == null ? '–' : Math.round(n).toLocaleString('en-GB');
   const fPct = p => p == null ? '–' : p.toFixed(1) + '%';
   const day = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
   const mon = (ym, o) => new Date(ym + '-15T12:00:00Z').toLocaleDateString('en-GB', { month: o ? 'short' : 'long', year: o ? undefined : 'numeric', timeZone: 'UTC' });
-  const rate = x => x && x.first ? x.fourth / x.first * 100 : null;
   const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} };
-  const Q = (D.q4 || []).filter(q => q.first > 0), teamQ = Object.fromEntries(Q.map(q => [q.we, q]));
-  const sum = (weeks, get) => weeks.reduce((a, we) => { const x = get(we); if (x) { a.first += x.first; a.fourth += x.fourth; } return a; }, { first: 0, fourth: 0 });
+  // Each client measures quality at a different point: Modern Milkman at the 4th weekly delivery, HelloFresh at the 2nd box.
+  const SRC = {
+    mm: { name: 'Modern Milkman', rows: D.q4 || [], mem: m => m.q4, b: 'fourth', rateT: '4th delivery rate', bT: 'Still on in week 4', bS: 'Took a 4th week delivery', aS: 'Took a 1st week delivery', dS: 'No delivery in week 4',
+          note: 'Modern Milkman: of the customers signed up in a week, how many still took a delivery in their 4th week.' },
+    hf: { name: 'HelloFresh', rows: D.hf2 || [], mem: m => m.hf2, b: 'second', rateT: '2nd box rate', bT: 'Got a 2nd box', bS: 'Took their 2nd box', aS: 'Got a 1st box', dS: 'No 2nd box',
+          note: 'HelloFresh: of the customers signed up in a week, how many went on to take their 2nd box. The latest weeks can still rise while 2nd boxes go out.' },
+  };
+  const have = Object.keys(SRC).filter(k => SRC[k].rows.some(q => q.first > 0));
+  if (!have.length) return;
+  let client = have.includes(ls('ybm-q-client')) ? ls('ybm-q-client') : have[0], S, Q, teamQ;
+  const rate = x => x && x.first ? x[S.b] / x.first * 100 : null;
+  const sum = (weeks, get) => weeks.reduce((a, we) => { const x = get(we); if (x) { a.first += x.first; a[S.b] += x[S.b]; } return a; }, { first: 0, [S.b]: 0 });
   // A period is one sign-up week, or a calendar month of sign-up weeks grouped by week-ending date.
   const periods = m => {
     if (m === 'week') return Q.map(q => ({ key: q.we, label: 'w/e ' + day(q.we), short: day(q.we), weeks: [q.we] }));
@@ -478,20 +487,24 @@ function qualityView(el, D) {
   };
   let mode = ls('ybm-q-mode') === 'month' ? 'month' : 'week', P, sel, sortKey = 'rate', sortDir = -1;
   el.innerHTML = `<section class="section">
-    <div class="sec-head"><h2>4th delivery quality</h2>
-      <div class="qctl"><div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
+    <div class="sec-head"><h2>Customer quality</h2>
+      <div class="qctl">${have.length > 1 ? `<div class="seg" role="group" aria-label="Client">${have.map(k => `<button data-c="${k}">${SRC[k].name}</button>`).join('')}</div>` : ''}<div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
       <select aria-label="Period"></select></div></div>
     <div class="tiles" data-q="tiles"></div>
-    <p class="note">Modern Milkman only. Of the customers signed up in a week, how many still took a delivery in their 4th week. Monthly adds up the sign-up weeks that end in that month.</p></section>
+    <p class="note" data-q="note"></p></section>
   <div class="chart"><h3 data-q="ctitle"></h3><div data-q="chart"></div></div>
   <section class="section"><div class="sec-head"><h2 data-q="ttitle"></h2><p class="note" data-q="tnote"></p></div>
     <div class="tablebox"><table class="qtbl"><thead></thead><tbody></tbody></table></div></section>`;
   const $q = n => el.querySelector(`[data-q="${n}"]`), selEl = el.querySelector('select');
-  el.querySelectorAll('.seg button').forEach(b => b.onclick = () => { mode = b.dataset.m; ls('ybm-q-mode', mode); setup(); });
+  el.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { mode = b.dataset.m; ls('ybm-q-mode', mode); setup(); });
+  el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { client = b.dataset.c; ls('ybm-q-client', client); setup(); });
   selEl.onchange = () => { sel = selEl.value; draw(); };
   function setup() {
+    S = SRC[client]; Q = S.rows.filter(q => q.first > 0); teamQ = Object.fromEntries(Q.map(q => [q.we, q]));
     P = periods(mode); sel = P[P.length - 1].key;
-    el.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === mode));
+    el.querySelectorAll('[data-m]').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === mode));
+    el.querySelectorAll('[data-c]').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === client));
+    $q('note').textContent = S.note + ' Monthly adds up the sign-up weeks that end in that month.';
     selEl.innerHTML = ''; P.slice().reverse().forEach(p => selEl.add(new Option(p.label, p.key))); selEl.value = sel;
     draw();
   }
@@ -500,11 +513,11 @@ function qualityView(el, D) {
     const t = sum(p.weeks, we => teamQ[we]), r = rate(t), rp = pp ? rate(sum(pp.weeks, we => teamQ[we])) : null;
     const d = rp == null || r == null ? p.label : `<span class="${r >= rp ? 'up' : 'down'}">${r >= rp ? '▲' : '▼'} ${Math.abs(r - rp).toFixed(1)} pts</span> vs ${esc(pp.label)}`;
     $q('tiles').innerHTML = `
-      <div class="tile"><div class="k">4th delivery rate</div><div class="v">${fPct(r)}</div><div class="s">${d}</div></div>
-      <div class="tile"><div class="k">New customers</div><div class="v">${fInt(t.first)}</div><div class="s">Took a 1st week delivery</div></div>
-      <div class="tile"><div class="k">Still on in week 4</div><div class="v">${fInt(t.fourth)}</div><div class="s">Took a 4th week delivery</div></div>
-      <div class="tile"><div class="k">Dropped off</div><div class="v">${fInt(Math.max(0, t.first - t.fourth))}</div><div class="s">No delivery in week 4</div></div>`;
-    $q('ctitle').textContent = `4th delivery rate by ${mode}`;
+      <div class="tile"><div class="k">${S.rateT}</div><div class="v">${fPct(r)}</div><div class="s">${d}</div></div>
+      <div class="tile"><div class="k">New customers</div><div class="v">${fInt(t.first)}</div><div class="s">${S.aS}</div></div>
+      <div class="tile"><div class="k">${S.bT}</div><div class="v">${fInt(t[S.b])}</div><div class="s">${S.bS}</div></div>
+      <div class="tile"><div class="k">Dropped off</div><div class="v">${fInt(Math.max(0, t.first - t[S.b]))}</div><div class="s">${S.dS}</div></div>`;
+    $q('ctitle').textContent = `${S.rateT} by ${mode}`;
     chart($q('chart'), P.map(x => ({ key: x.key, label: x.short, full: x.label, y: rate(sum(x.weeks, we => teamQ[we])) })));
     $q('ttitle').textContent = `Your team · ${p.label}`;
     table(p);
@@ -512,38 +525,39 @@ function qualityView(el, D) {
   function chart(box, vals) {
     const w = box.clientWidth && box.clientWidth < 520 ? 380 : 640, h = w < 640 ? 220 : 190, L = 40, R = 6, T = 14, B = 22, y = v => T + (h - T - B) * (1 - v / 100);
     const bw = (w - L - R) / vals.length, bwd = Math.min(bw - 4, 72), k = Math.ceil(vals.length / (w < 640 ? 4 : 8));
-    let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="4th delivery rate by ${mode}">`;
+    let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${S.rateT} by ${mode}">`;
     for (let g = 0; g <= 100; g += 25) s += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${g}%</text>`;
     vals.forEach((v, i) => {
       const cx = L + i * bw + bw / 2, x = cx - bwd / 2, bh = v.y == null ? 0 : y(0) - y(v.y), r = Math.min(4, bh / 2);
       if (bh > 0) s += `<path class="bar${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
       if (v.y != null && vals.length <= 12) s += `<text class="axis val" x="${cx}" y="${y(v.y) - 5}" text-anchor="middle">${Math.round(v.y)}%</text>`;
-      if (i % k === 0 || i === vals.length - 1) s += `<text class="axis" x="${cx}" y="${h - 6}" text-anchor="middle">${esc(v.label)}</text>`;
+      const lastL = i === vals.length - 1;
+      if ((i % k === 0 && vals.length - 1 - i >= k) || lastL) s += `<text class="axis" x="${lastL && k > 1 ? w - R : cx}" y="${h - 6}" text-anchor="${lastL && k > 1 ? 'end' : 'middle'}">${esc(v.label)}</text>`;
       s += `<rect class="hit" x="${L + i * bw}" y="${T}" width="${bw}" height="${h - T - B}" data-i="${i}"><title>${esc(v.full)}: ${fPct(v.y)}</title></rect>`;
     });
     box.innerHTML = s + '</svg>';
     box.querySelectorAll('.hit').forEach(r => r.onclick = () => { sel = selEl.value = vals[+r.dataset.i].key; draw(); });
   }
   function table(p) {
-    const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: [m.sub, m.stage].filter(Boolean).join(' · '), ...sum(p.weeks, we => (m.q4 || {})[we]) }))
-      .filter(r => r.first > 0).map(r => ({ ...r, rate: rate(r), lost: Math.max(0, r.first - r.fourth) }));
+    const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: [m.sub, m.stage].filter(Boolean).join(' · '), ...sum(p.weeks, we => (S.mem(m) || {})[we]) }))
+      .filter(r => r.first > 0).map(r => ({ ...r, kept: r[S.b], rate: rate(r), lost: Math.max(0, r.first - r[S.b]) }));
     const others = D.members.length - rows.length;
     rows.sort((a, b) => sortKey === 'name' ? sortDir * a.name.localeCompare(b.name) : (sortDir * (a[sortKey] - b[sortKey]) || a.name.localeCompare(b.name)));
-    const cols = [{ k: 'name', t: 'Name' }, { k: 'first', t: 'New customers', n: 1 }, { k: 'fourth', t: 'Still on in week 4', n: 1 }, { k: 'lost', t: 'Dropped off', n: 1 }, { k: 'rate', t: '4th delivery rate', n: 1 }];
+    const cols = [{ k: 'name', t: 'Name' }, { k: 'first', t: 'New customers', n: 1 }, { k: 'kept', t: S.bT, n: 1 }, { k: 'lost', t: 'Dropped off', n: 1 }, { k: 'rate', t: S.rateT, n: 1 }];
     const tb = el.querySelector('.qtbl');
     tb.tHead.innerHTML = '<tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
     tb.tBodies[0].innerHTML = rows.length ? rows.map(r => `<tr><td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc(r.sub)}</small></div></td>
-      <td class="n">${fInt(r.first)}</td><td class="n">${fInt(r.fourth)}</td><td class="n">${fInt(r.lost)}</td><td class="n">${fPct(r.rate)}</td></tr>`).join('')
-      : `<tr><td colspan="5" class="dim">Nobody in this team had Modern Milkman sign-ups in ${esc(p.label)}.</td></tr>`;
+      <td class="n">${fInt(r.first)}</td><td class="n">${fInt(r.kept)}</td><td class="n">${fInt(r.lost)}</td><td class="n">${fPct(r.rate)}</td></tr>`).join('')
+      : `<tr><td colspan="5" class="dim">Nobody in this team had ${S.name} sign-ups in ${esc(p.label)}.</td></tr>`;
     tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => { if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = sortKey === 'name' ? 1 : -1; } table(p); });
-    $q('tnote').textContent = others ? `${others} other ${others === 1 ? 'person has' : 'people have'} no Modern Milkman sign-ups in this ${mode}.` : '';
+    $q('tnote').textContent = others ? `${others} other ${others === 1 ? 'person has' : 'people have'} no ${S.name} sign-ups in this ${mode}.` : '';
   }
   setup();
 }
 // Page tabs: "Sales & earnings" and "Delivery quality". Teams with no quality data keep the single page.
 function pageTabs(root, D) {
   const bar = root.querySelector('.pagetabs'), main = root.querySelector('[data-view="main"]'), qv = root.querySelector('[data-view="quality"]');
-  if (!(D.q4 || []).some(q => q.first > 0)) { bar.hidden = true; qv.hidden = true; return; }
+  if (![D.q4, D.hf2].some(x => (x || []).some(q => q.first > 0))) { bar.hidden = true; qv.hidden = true; return; }
   qualityView(qv, D);
   const show = t => { bar.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); main.hidden = t !== 'main'; qv.hidden = t !== 'quality'; try { localStorage.setItem('ybm-tab', t); } catch (e) {} };
   bar.querySelectorAll('button').forEach(b => b.onclick = () => show(b.dataset.tab));

@@ -262,7 +262,8 @@ $('#authForm').addEventListener('submit', async e => {
     return note($('#authMsg'), /invalid login/i.test(m) ? 'That email and password don\'t match. Try again, or ask Younes to reset your password.'
       : /not confirmed/i.test(m) ? 'Confirm your email first: open the link we sent you, then sign in.' : m, true);
   }
-  if (mode === 'up' && !r.data.session) note($('#authMsg'), `Check ${email} for a confirmation link, then come back and sign in.`);
+  if (mode !== 'forgot' && r.data.session) { $('#authForm').reset(); return start(); }   // signed in: open the dashboard straight away
+  if (mode === 'up') note($('#authMsg'), `Check ${email} for a confirmation link, then come back and sign in.`);
   if (mode === 'forgot') note($('#authMsg'), `If ${email} has an account, a reset link is on its way.`);
 });
 $('#resetForm').addEventListener('submit', async e => {

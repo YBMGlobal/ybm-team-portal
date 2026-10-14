@@ -318,11 +318,12 @@ function renderTeam(D) {
       <label class="note">Week ending <select data-r="week" id="weekPick"></select></label></div>
     <div class="tiles" data-r="earnTiles"></div>
     <p class="note">From the Modern Milkman and HelloFresh / Green Chef earnings sheets. Paid sales exclude fails. Fail rate is fails ÷ (paid sales + fails).</p></section>
+  <section class="section" data-r="q4sec" hidden></section>
   <section class="section"><h2>Week by week</h2><div class="charts">
       <div class="chart"><h3>Paid sales</h3><div data-r="cSales"></div></div>
       <div class="chart"><h3>Team earnings (£)</h3><div data-r="cPay"></div></div>
       <div class="chart"><h3>Fail rate (%)</h3><div data-r="cFail"></div></div></div></section>
-  <section class="section"><div class="sec-head"><h2>Your team</h2><p class="note">A dash means no sales or pay that week. Avg / week counts only weeks they worked.</p></div>
+  <section class="section"><div class="sec-head"><h2>Your team</h2><p class="note">A dash means no sales or pay that week. Avg / week counts only weeks they worked.<span data-r="q4note"></span></p></div>
     <div class="tablebox"><table class="members"><thead></thead><tbody></tbody></table></div></section>
   <footer><div>Team members are the people in this team's spider on Owner IQ today, including its sub-teams. Earlier weeks count only people who are in the team now.</div>
     <div>These numbers are private to YBM. Please don't share screenshots outside your team.</div></footer></div>`;
@@ -395,7 +396,7 @@ function renderTeam(D) {
       r.addEventListener('mouseenter', () => { const sv = el.querySelector('svg').getBoundingClientRect(), pb = el.parentElement.getBoundingClientRect(), rb = r.getBoundingClientRect();
         tip.textContent = `w/e ${day(v.we)}: ${v.y == null ? '–' : fmt(v.y, true)}`; tip.style.left = (rb.left - pb.left + rb.width / 2) + 'px'; tip.style.top = (Math.min(rb.bottom, sv.top + (y(v.y || 0) / h) * sv.height) - pb.top - 6) + 'px'; tip.hidden = false; });
       r.addEventListener('mouseleave', () => tip.hidden = true);
-      r.addEventListener('click', () => pickWeek(v.we));
+      r.addEventListener('click', () => { if (W.some(w => w.we === v.we)) pickWeek(v.we); });
     });
   }
   function charts() {
@@ -409,6 +410,8 @@ function renderTeam(D) {
     { k: 'sales', t: 'Paid sales', n: 1, g: 1 }, { k: 'fails', t: 'Fails', n: 1 }, { k: 'fr', t: 'Fail rate', n: 1 }, { k: 'pay', t: 'Earnings', n: 1 },
     { k: 'avg', t: 'Avg / week (4 wks)', n: 1, g: 1 },
   ];
+  const Q = (D.q4 || []).filter(q => q.first > 0), Q4 = Q.slice(-4).map(q => q.we);
+  if (Q.length) cols.push({ k: 'q4', t: '4th del. (4 wks)', n: 1, g: 1 });
   function rows() {
     const i = W.findIndex(w => w.we === selWE), four = W.slice(Math.max(0, i - 3), i + 1).map(w => w.we);
     return D.members.map(m => {
@@ -417,7 +420,8 @@ function renderTeam(D) {
       const lc = cur && cur.members[m.id], ll = last && last.members[m.id];
       return { ...m, now: lc ? lc.sales : null, lastw: ll ? ll.sales : null, sales: e.sales ?? null, fails: e.fails ?? null,
         fr: e.sales != null ? pct(e.fails, e.sales) : null, pay: e.pay ?? null,
-        avg: worked.length ? worked.reduce((a, x) => a + x.pay, 0) / worked.length : null };
+        avg: worked.length ? worked.reduce((a, x) => a + x.pay, 0) / worked.length : null,
+        q4: (() => { const z = Q4.map(we => (m.q4 || {})[we]).filter(Boolean), f = z.reduce((a, x) => a + x.first, 0); return f ? z.reduce((a, x) => a + x.fourth, 0) / f * 100 : null; })() };
     });
   }
   function table() {
@@ -429,7 +433,7 @@ function renderTeam(D) {
       if (x == null) return 1; if (y == null) return -1; return sortDir * (x - y);
     });
     const dash = '<span class="dim">–</span>';
-    tb.tHead.innerHTML = `<tr><th></th><th class="n grp" colspan="2">Owner IQ</th><th class="n grp" colspan="4">Earnings w/e ${day(selWE)}</th><th class="grp"></th></tr><tr>` +
+    tb.tHead.innerHTML = `<tr><th></th><th class="n grp" colspan="2">Owner IQ</th><th class="n grp" colspan="4">Earnings w/e ${day(selWE)}</th><th class="grp"></th>${Q.length ? '<th class="grp"></th>' : ''}</tr><tr>` +
       cols.map(c => `<th class="${c.n ? 'n' : ''}${c.g ? ' grp' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
     tb.tBodies[0].innerHTML = list.map(r => `<tr>
       <td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc([r.sub, r.stage].filter(Boolean).join(' · '))}</small></div></td>
@@ -437,11 +441,28 @@ function renderTeam(D) {
       <td class="n grp">${r.sales ?? dash}</td><td class="n">${r.fails ?? dash}</td>
       <td class="n">${r.fr == null ? dash : `<span class="pill ${failPill(r.fr)}">${fmtPct(r.fr)}</span>`}</td>
       <td class="n">${r.pay == null ? dash : fmtGBP(r.pay)}</td>
-      <td class="n grp">${r.avg == null ? dash : fmtGBP(r.avg)}</td></tr>`).join('');
+      <td class="n grp">${r.avg == null ? dash : fmtGBP(r.avg)}</td>${Q.length ? `<td class="n grp">${r.q4 == null ? dash : fmtPct(r.q4)}</td>` : ''}</tr>`).join('');
     tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => {
       if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = b.dataset.k === 'name' ? 1 : -1; } table(); });
   }
-  function draw() { earnTiles(); charts(); table(); }
+  function q4() {
+    const sec = R('q4sec');
+    if (!Q.length) return;
+    sec.hidden = false;
+    R('q4note').textContent = ' 4th delivery is the share of their Modern Milkman customers still taking a 4th delivery, over the last 4 sign-up weeks.';
+    const lq = Q[Q.length - 1], pq = Q[Q.length - 2], four = Q.slice(-4);
+    const rt = q => q.first ? q.fourth / q.first * 100 : null;
+    const f4 = four.reduce((a, q) => a + q.first, 0), d4 = four.reduce((a, q) => a + q.fourth, 0);
+    sec.innerHTML = `<div class="sec-head"><h2>4th delivery quality</h2><p class="note">Modern Milkman · share of new customers still taking their 4th delivery</p></div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Latest week</div><div class="v">${fmtPct(rt(lq))}</div><div class="s">w/e ${day(lq.we)} · ${fmtInt(lq.fourth)} of ${fmtInt(lq.first)}</div></div>
+        ${pq ? `<div class="tile"><div class="k">Week before</div><div class="v">${fmtPct(rt(pq))}</div><div class="s">w/e ${day(pq.we)} · ${fmtInt(pq.fourth)} of ${fmtInt(pq.first)}</div></div>` : ''}
+        <div class="tile"><div class="k">Last 4 weeks</div><div class="v">${fmtPct(f4 ? d4 / f4 * 100 : null)}</div><div class="s">${fmtInt(d4)} of ${fmtInt(f4)} customers</div></div>
+      </div>
+      <div class="charts"><div class="chart"><h3>4th delivery rate by sign-up week</h3><div class="q4c"></div></div></div>`;
+    bars(sec.querySelector('.q4c'), '4th delivery rate', Q.map(q => ({ we: q.we, y: rt(q) })), (n, full) => full ? fmtPct(n) : Math.round(n) + '%');
+  }
+  function draw() { q4(); earnTiles(); charts(); table(); }
   draw();
 }
 

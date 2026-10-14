@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>YBM Team Portal</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: slim top bar (wordmark, team switcher, account) over one centred column; sign-in is a single narrow card */
+:root {
+  --bg: #f5f6f4; --panel: #ffffff; --ink: #15191c; --ink-2: #4d5559; --muted: #7c8589; --line: #dfe3e1;
+  --accent: #2f5d50; --accent-ink: #ffffff; --accent-soft: #e2ece8; --good: #2e7d4f; --warn: #a86400; --bad: #b3261e;
+  --display: "Fraunces", Georgia, serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #0e1112; --panel: #161b1c; --ink: #e9eceb; --ink-2: #b2babb; --muted: #858f91; --line: #283032;
+  --accent: #7fb8a5; --accent-ink: #0e1112; --accent-soft: #1d2b27; --good: #6cc48f; --warn: #e2a64a; --bad: #f08a80; color-scheme: dark } }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; min-height: 100vh; }
+[hidden] { display: none !important; }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px); }
+.bar-in { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-block: 10px; }
+.mark { font-family: var(--display); font-weight: 600; font-size: 20px; letter-spacing: .02em; margin-right: auto; display: flex; align-items: baseline; gap: 8px; }
+.mark small { font-family: var(--body); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+button, select, input { font: inherit; color: inherit; }
+select, input[type=email], input[type=password], input[type=text] { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn:disabled { opacity: .6; cursor: default; }
+.link { all: unset; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.who-am-i { font-size: 13px; color: var(--muted); }
+
+/* Sign-in */
+.auth { max-width: 400px; margin: 9vh auto 40px; display: grid; gap: 18px; }
+.auth h1 { font-family: var(--display); font-weight: 600; font-size: 34px; margin: 0; line-height: 1.05; }
+.auth p { margin: 0; color: var(--ink-2); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: grid; gap: 14px; }
+.field { display: grid; gap: 5px; font-size: 13px; color: var(--ink-2); }
+.msg { font-size: 13.5px; padding: 9px 11px; border-radius: 8px; background: var(--accent-soft); color: var(--ink); }
+.msg.err { background: transparent; border: 1px solid var(--bad); color: var(--bad); }
+.tabs { display: flex; gap: 4px; background: var(--bg); padding: 4px; border-radius: 9px; }
+.tabs button { flex: 1; border: 0; background: transparent; padding: 7px; border-radius: 6px; cursor: pointer; color: var(--ink-2); }
+.tabs button[aria-selected=true] { background: var(--panel); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* Dashboard (same design as the team pages) */
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 56px; display: grid; gap: 28px; }
+.num, td.n, th.n { font-variant-numeric: tabular-nums; }
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 24px; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.head h1 { font-family: var(--display); font-weight: 600; font-size: clamp(34px, 6vw, 52px); line-height: 1; margin: 6px 0 8px; text-wrap: balance; }
+.meta { color: var(--ink-2); }
+.updated { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+h2 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; margin: 0; }
+.section { display: grid; gap: 12px; }
+.sec-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.tile { background: var(--panel); padding: 16px 18px; display: grid; gap: 4px; align-content: start; }
+.tile .k { font-size: 12.5px; color: var(--ink-2); }
+.tile .v { font-family: var(--mono); font-size: 30px; font-weight: 500; letter-spacing: -.01em; }
+.tile .s { font-size: 12.5px; color: var(--muted); }
+.tile.live { background: var(--accent-soft); }
+.tile.live .k::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
+.up { color: var(--good); } .down { color: var(--bad); }
+.pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.chart { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 8px; min-width: 0; position: relative; }
+.chart h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart .axis { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .bar { fill: var(--accent); opacity: .55; }
+.chart .bar.sel { opacity: 1; }
+.chart .hit { fill: transparent; cursor: pointer; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; padding: 6px 9px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -100%); }
+.tablebox { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.members { min-width: 760px; }
+th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+th { font-size: 12px; font-weight: 600; color: var(--ink-2); background: var(--panel); }
+th button { all: unset; cursor: pointer; }
+th button[aria-sort]::after { content: " ↓"; } th button[aria-sort="ascending"]::after { content: " ↑"; }
+td.n, th.n { text-align: right; font-family: var(--mono); font-size: 13px; }
+th.grp, td.grp { border-left: 1px solid var(--line); }
+.who { display: grid; }
+.who small { color: var(--muted); font-size: 12px; }
+.lead { font-size: 11px; color: var(--accent); margin-left: 6px; letter-spacing: .04em; text-transform: uppercase; }
+.dim { color: var(--muted); }
+footer { font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; }
+.subnav { display: flex; flex-wrap: wrap; gap: 8px; }
+.subnav button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+
+/* Admin */
+.admin td { white-space: normal; }
+.admin input[type=email] { width: 100%; }
+.addrow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+@media (max-width: 640px) { .addrow { grid-template-columns: 1fr; } }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+@media (prefers-reduced-motion: no-preference) { .chart .bar { transition: opacity .15s; } }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="bar gutter" id="bar" hidden>
+  <div class="bar-in">
+    <div class="mark">YBM <small>Team Portal</small></div>
+    <label class="who-am-i" for="teamPick" id="teamPickWrap" hidden>Team <select id="teamPick"></select></label>
+    <button class="btn" id="adminBtn" hidden>Manage access</button>
+    <span class="who-am-i" id="meEmail"></span>
+    <button class="btn" id="pwBtn">Change password</button>
+    <button class="btn" id="signOut">Sign out</button>
+  </div>
+</div>
+
+<main class="gutter">
+  <!-- Sign in / create account / reset -->
+  <section class="auth" id="authView" hidden>
+    <div>
+      <div class="eyebrow">YBM Global</div>
+      <h1>Team Portal</h1>
+    </div>
+    <p>Team leaders: sign in to see your team's sales, earnings and fail rate.</p>
+    <form class="card" id="authForm" novalidate>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tabIn" aria-selected="true">Sign in</button>
+        <button type="button" role="tab" id="tabUp" aria-selected="false">Create account</button>
+      </div>
+      <label class="field">Email <input type="email" id="email" autocomplete="email" required></label>
+      <label class="field" id="pwField">Password <input type="password" id="password" autocomplete="current-password" minlength="8" required></label>
+      <div class="msg" id="authMsg" hidden></div>
+      <button class="btn primary" id="authGo" type="submit">Sign in</button>
+      <button type="button" class="link" id="forgot">Forgot your password?</button>
+      <p class="note" id="noSignupNote" hidden>New leader or forgot your password? Ask Younes to set up your login.</p>
+    </form>
+    <form class="card" id="resetForm" hidden novalidate>
+      <strong>Choose a new password</strong>
+      <label class="field">New password <input type="password" id="newPassword" autocomplete="new-password" minlength="8" required></label>
+      <div class="msg" id="resetMsg" hidden></div>
+      <button class="btn primary" type="submit">Save password</button>
+    </form>
+  </section>
+
+  <!-- Signed in but not linked to a team -->
+  <section class="auth" id="pendingView" hidden>
+    <h1>Almost there</h1>
+    <p>Your account <strong id="pendingEmail"></strong> isn't linked to a team yet. Ask Younes to add this email address to your team, then refresh this page.</p>
+    <button class="btn" id="pendingRefresh">Refresh</button>
+  </section>
+
+  <section class="auth" id="pwView" hidden>
+    <h1>Change password</h1>
+    <form class="card" id="pwForm" novalidate>
+      <label class="field">New password <input type="password" id="pwNew" autocomplete="new-password" minlength="8" required></label>
+      <div class="msg" id="pwMsg" hidden></div>
+      <button class="btn primary" type="submit">Save password</button>
+      <button type="button" class="link" id="pwBack">Back to dashboards</button>
+    </form>
+  </section>
+
+  <section id="dashView" hidden></section>
+
+  <!-- Admin -->
+  <section class="wrap" id="adminView" hidden>
+    <div class="head"><div><div class="eyebrow">Admin</div><h1>Who sees what</h1>
+      <div class="meta">Add a leader's email and pick their team. Then create their login in Supabase (Authentication, Users, Add user, Create new user, tick Auto Confirm) and send them the email and starting password. A leader also sees every sub-team under their team.</div></div>
+      <button class="btn" id="adminBack">Back to dashboards</button></div>
+    <form class="card addrow" id="addForm" novalidate>
+      <input type="email" id="addEmail" placeholder="leader@example.com" aria-label="Leader email" required>
+      <select id="addTeam" aria-label="Team"></select>
+      <label class="check"><input type="checkbox" id="addAdmin"> Admin</label>
+      <button class="btn primary" type="submit">Add</button>
+    </form>
+    <div class="msg" id="adminMsg" hidden></div>
+    <div class="tablebox"><table class="admin"><thead><tr><th>Email</th><th>Team</th><th>Admin</th><th></th></tr></thead><tbody id="accessRows"></tbody></table></div>
+  </section>
+</main>
+
+<script>
+const CFG = window.YBM_PORTAL || {};
+const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const views = ['authView', 'pendingView', 'pwView', 'dashView', 'adminView'];
+function show(id) { views.forEach(v => $('#' + v).hidden = v !== id); $('#bar').hidden = id === 'authView'; }
+function note(el, text, err) { el.textContent = text; el.className = 'msg' + (err ? ' err' : ''); el.hidden = !text; }
+
+// ---------- Auth ----------
+let mode = 'in';
+function setMode(m) {
+  mode = m;
+  $('#tabIn').setAttribute('aria-selected', m === 'in'); $('#tabUp').setAttribute('aria-selected', m === 'up');
+  $('#authGo').textContent = m === 'in' ? 'Sign in' : m === 'up' ? 'Create account' : 'Email me a reset link';
+  $('#pwField').hidden = m === 'forgot'; $('#forgot').hidden = m !== 'in' || !signupOpen;
+  $('#password').autocomplete = m === 'up' ? 'new-password' : 'current-password';
+  note($('#authMsg'), '');
+}
+const signupOpen = !!CFG.allowSignup;
+if (!signupOpen) { document.querySelector('.tabs').hidden = true; $('#noSignupNote').hidden = false; }
+$('#tabIn').onclick = () => setMode('in');
+$('#tabUp').onclick = () => setMode('up');
+$('#forgot').onclick = () => setMode('forgot');
+const here = location.origin + location.pathname;
+$('#authForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = $('#email').value.trim().toLowerCase(), password = $('#password').value, go = $('#authGo');
+  if (!email.includes('@')) return note($('#authMsg'), 'Enter your email address.', true);
+  if (mode !== 'forgot' && password.length < 8) return note($('#authMsg'), 'Your password needs at least 8 characters.', true);
+  go.disabled = true;
+  let r;
+  if (mode === 'in') r = await sb.auth.signInWithPassword({ email, password });
+  else if (mode === 'up') r = await sb.auth.signUp({ email, password, options: { emailRedirectTo: here } });
+  else r = await sb.auth.resetPasswordForEmail(email, { redirectTo: here });
+  go.disabled = false;
+  if (r.error) {
+    const m = r.error.message || '';
+    return note($('#authMsg'), /invalid login/i.test(m) ? 'That email and password don\'t match. Try again, or ask Younes to reset your password.'
+      : /not confirmed/i.test(m) ? 'Confirm your email first: open the link we sent you, then sign in.' : m, true);
+  }
+  if (mode === 'up' && !r.data.session) note($('#authMsg'), `Check ${email} for a confirmation link, then come back and sign in.`);
+  if (mode === 'forgot') note($('#authMsg'), `If ${email} has an account, a reset link is on its way.`);
+});
+$('#resetForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const p = $('#newPassword').value;
+  if (p.length < 8) return note($('#resetMsg'), 'Your password needs at least 8 characters.', true);
+  const { error } = await sb.auth.updateUser({ password: p });
+  if (error) return note($('#resetMsg'), error.message, true);
+  $('#resetForm').hidden = true; $('#authForm').hidden = false; start();
+});
+$('#signOut').onclick = async () => { await sb.auth.signOut(); location.hash = ''; boot(); };
+$('#pendingRefresh').onclick = () => start();
+$('#pwBtn').onclick = () => { $('#pwForm').reset(); note($('#pwMsg'), ''); show('pwView'); };
+$('#pwBack').onclick = () => start();
+$('#pwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const p = $('#pwNew').value;
+  if (p.length < 8) return note($('#pwMsg'), 'Your password needs at least 8 characters.', true);
+  const { error } = await sb.auth.updateUser({ password: p });
+  if (error) return note($('#pwMsg'), error.message, true);
+  $('#pwForm').reset(); note($('#pwMsg'), 'Password changed. Use it next time you sign in.');
+});
+
+let recovering = false;
+sb.auth.onAuthStateChange(ev => {
+  if (ev === 'PASSWORD_RECOVERY') { recovering = true; show('authView'); $('#authForm').hidden = true; $('#resetForm').hidden = false; }
+});
+
+// ---------- Session start ----------
+let me = null, teams = [], isAdmin = false;
+async function boot() {
+  const { data } = await sb.auth.getSession();
+  if (!data.session) { setMode('in'); show('authView'); return; }
+  if (!recovering) start();
+}
+async function start() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return boot();
+  me = user.email.toLowerCase();
+  $('#meEmail').textContent = me;
+  const [{ data: acc }, { data: list, error }] = await Promise.all([
+    sb.from('access').select('*').eq('email', me).maybeSingle(),
+    sb.from('teams').select('slug,name,parent,ancestors,leader,updated_at'),
+  ]);
+  if (error) { show('pendingView'); $('#pendingEmail').textContent = me; return; }
+  isAdmin = !!(acc && acc.is_admin);
+  teams = order(list || []);
+  $('#adminBtn').hidden = !isAdmin;
+  if (!teams.length) { show('pendingView'); $('#pendingEmail').textContent = me; $('#bar').hidden = false; return; }
+  const pick = $('#teamPick');
+  pick.innerHTML = teams.map(t => `<option value="${esc(t.slug)}">${' '.repeat(t.ancestors.length)}${esc(t.name)}</option>`).join('');
+  $('#teamPickWrap').hidden = teams.length < 2;
+  const want = location.hash.slice(1);
+  const home = (acc && acc.team_slug && teams.some(t => t.slug === acc.team_slug)) ? acc.team_slug : teams[0].slug;
+  openTeam(teams.some(t => t.slug === want) ? want : home);
+}
+function order(list) {  // parents first, each followed by its sub-teams
+  const kids = {}; list.forEach(t => (kids[t.parent || ''] ||= []).push(t));
+  const visible = new Set(list.map(t => t.slug));
+  const roots = list.filter(t => !t.parent || !visible.has(t.parent));
+  const out = []; const walk = t => { out.push(t); (kids[t.slug] || []).sort((a, b) => a.name.localeCompare(b.name)).forEach(walk); };
+  roots.sort((a, b) => a.name.localeCompare(b.name)).forEach(walk);
+  return out;
+}
+$('#teamPick').onchange = e => openTeam(e.target.value);
+async function openTeam(slug) {
+  $('#teamPick').value = slug;
+  if (location.hash.slice(1) !== slug) history.replaceState(null, '', '#' + slug);
+  const { data, error } = await sb.from('teams').select('data').eq('slug', slug).maybeSingle();
+  if (error || !data) { show('pendingView'); return; }
+  show('dashView');
+  renderTeam(data.data);
+}
+
+// ---------- Dashboard ----------
+function renderTeam(D) {
+  const root = $('#dashView');
+  const kids = teams.filter(t => t.parent === D.slug);
+  root.innerHTML = `<div class="wrap">
+  <div class="head"><div>
+      <div class="eyebrow">YBM Global · Team stats</div>
+      <h1>${esc(D.team)}</h1>
+      <div class="meta" data-r="meta"></div>
+    </div><div class="updated" data-r="updated"></div></div>
+  ${kids.length ? `<div class="subnav"><span class="note">Sub-teams:</span>${kids.map(k => `<button data-team="${esc(k.slug)}">${esc(k.name)}</button>`).join('')}</div>` : ''}
+  <section class="section"><div class="sec-head"><h2>Sales logged in Owner IQ</h2><p class="note">Live, refreshed every morning</p></div>
+    <div class="tiles" data-r="liveTiles"></div></section>
+  <section class="section"><div class="sec-head"><h2>Earnings and fails</h2>
+      <label class="note">Week ending <select data-r="week" id="weekPick"></select></label></div>
+    <div class="tiles" data-r="earnTiles"></div>
+    <p class="note">From the Modern Milkman and HelloFresh / Green Chef earnings sheets. Paid sales exclude fails. Fail rate is fails ÷ (paid sales + fails).</p></section>
+  <section class="section"><h2>Week by week</h2><div class="charts">
+      <div class="chart"><h3>Paid sales</h3><div data-r="cSales"></div></div>
+      <div class="chart"><h3>Team earnings (£)</h3><div data-r="cPay"></div></div>
+      <div class="chart"><h3>Fail rate (%)</h3><div data-r="cFail"></div></div></div></section>
+  <section class="section"><div class="sec-head"><h2>Your team</h2><p class="note">A dash means no sales or pay that week. Avg / week counts only weeks they worked.</p></div>
+    <div class="tablebox"><table class="members"><thead></thead><tbody></tbody></table></div></section>
+  <footer><div>Team members are the people in this team's spider on Owner IQ today, including its sub-teams. Earlier weeks count only people who are in the team now.</div>
+    <div>These numbers are private to YBM. Please don't share screenshots outside your team.</div></footer></div>`;
+  root.querySelectorAll('[data-team]').forEach(b => b.onclick = () => openTeam(b.dataset.team));
+  const R = n => root.querySelector(`[data-r="${n}"]`);
+
+  const fmtInt = n => n == null ? '–' : Math.round(n).toLocaleString('en-GB');
+  const fmtGBP = n => n == null ? '–' : '£' + Math.round(n).toLocaleString('en-GB');
+  const pct = (f, s) => (s + f) ? f / (s + f) * 100 : null;
+  const fmtPct = p => p == null ? '–' : p.toFixed(1) + '%';
+  const day = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const failPill = p => p == null ? '' : p < 12 ? 'good' : p < 20 ? 'warn' : 'bad';
+
+  const parentName = D.parent;
+  R('meta').textContent = (parentName ? `Part of ${parentName} · ` : '') + `Led by ${D.leader} · ${D.members.length} people` + (D.subteams.length ? ` · includes ${D.subteams.join(', ')}` : '');
+  R('updated').textContent = 'Updated ' + new Date(D.updated).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+
+  const cur = D.live.find(w => w.current), done = D.live.filter(w => !w.current);
+  const last = done[done.length - 1], prev = done[done.length - 2];
+  const delta = (a, b) => { if (a == null || b == null || !b) return ''; const d = (a - b) / b * 100; return `<span class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(0)}%</span> vs w/c ${day(prev.ws)}`; };
+  R('liveTiles').innerHTML = [
+    cur && `<div class="tile live"><div class="k">This week so far</div><div class="v">${fmtInt(cur.sales)}</div><div class="s">Week starting ${day(cur.ws)}</div></div>`,
+    last && `<div class="tile"><div class="k">Last week</div><div class="v">${fmtInt(last.sales)}</div><div class="s">${prev ? delta(last.sales, prev.sales) : 'w/c ' + day(last.ws)}</div></div>`,
+    last && `<div class="tile"><div class="k">In the field last week</div><div class="v">${fmtInt(last.inField)}</div><div class="s">Sales per BA ${last.inField ? (last.sales / last.inField).toFixed(1) : '–'}</div></div>`,
+    last && `<div class="tile"><div class="k">Reliability last week</div><div class="v">${last.reliability == null ? '–' : last.reliability + '%'}</div><div class="s">${fmtInt(last.doors)} doors knocked</div></div>`,
+  ].filter(Boolean).join('') || '<div class="tile"><div class="s">No Owner IQ data for this team yet.</div></div>';
+
+  const W = D.weeks, sel = R('week');
+  if (!W.length) return;
+  W.slice().reverse().forEach(w => sel.add(new Option(day(w.we) + ' ' + w.we.slice(0, 4), w.we)));
+  let selWE = W[W.length - 1].we;
+  try { const s = localStorage.getItem('ybm-week'); if (s && W.some(w => w.we === s)) selWE = s; } catch (e) {}
+  sel.value = selWE;
+  const pickWeek = we => { selWE = we; sel.value = we; try { localStorage.setItem('ybm-week', we); } catch (e) {} draw(); };
+  sel.onchange = () => pickWeek(sel.value);
+
+  function earnTiles() {
+    const i = W.findIndex(w => w.we === selWE), w = W[i], p = W[i - 1];
+    const four = W.slice(Math.max(0, i - 3), i + 1);
+    const fs = four.reduce((a, x) => a + x.sales, 0), ff = four.reduce((a, x) => a + x.fails, 0);
+    const avg = w.active ? w.pay / w.active : null;
+    const cmp = (a, b) => b == null ? '' : `<span class="${a >= b ? 'up' : 'down'}">${a >= b ? '▲' : '▼'} ${fmtGBP(Math.abs(a - b))}</span> vs previous week`;
+    R('earnTiles').innerHTML = `
+      <div class="tile"><div class="k">Paid sales</div><div class="v">${fmtInt(w.sales)}</div><div class="s">MM ${fmtInt(w.mm)} · HF/GC ${fmtInt(w.hf)}</div></div>
+      <div class="tile"><div class="k">Team earnings</div><div class="v">${fmtGBP(w.pay)}</div><div class="s">${p ? cmp(w.pay, p.pay) : ''}</div></div>
+      <div class="tile"><div class="k">Average per BA</div><div class="v">${fmtGBP(avg)}</div><div class="s">${w.active} BAs with a paid sale</div></div>
+      <div class="tile"><div class="k">Fail rate</div><div class="v">${fmtPct(pct(w.fails, w.sales))}</div><div class="s">${fmtInt(w.fails)} fails · 4-week ${fmtPct(pct(ff, fs))}</div></div>`;
+  }
+  function bars(el, title, vals, fmt) {
+    const w = 480, h = 170, L = 40, Rm = 6, T = 10, B = 22;
+    const max = Math.max(1, ...vals.map(v => v.y ?? 0));
+    const step = Math.pow(10, Math.floor(Math.log10(max))); const nice = [1, 2, 2.5, 5, 10].map(m => m * step).find(m => max / m <= 4) || step * 10;
+    const top = Math.ceil(max / nice) * nice;
+    const y = v => T + (h - T - B) * (1 - v / top);
+    const bw = (w - L - Rm) / vals.length;
+    let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${title} by week">`;
+    for (let g = 0; g <= top + 1e-9; g += nice) s += `<line class="grid" x1="${L}" x2="${w - Rm}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${fmt(g)}</text>`;
+    vals.forEach((v, i) => {
+      const x = L + i * bw, bh = Math.max(0, y(0) - y(v.y ?? 0)), r = Math.min(4, bh / 2);
+      if (v.y) s += `<path class="bar${v.we === selWE ? ' sel' : ''}" d="M${x + 2},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bw - 4 - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
+      const k = Math.ceil(vals.length / 6);
+      if ((i % k === 0 && vals.length - 1 - i >= k) || i === vals.length - 1) s += `<text class="axis" x="${x + bw / 2}" y="${h - 6}" text-anchor="middle">${day(v.we)}</text>`;
+      s += `<rect class="hit" x="${x}" y="${T}" width="${bw}" height="${h - T - B}" data-i="${i}"/>`;
+    });
+    el.innerHTML = s + '</svg>';
+    el.parentElement.querySelectorAll('.tip').forEach(t => t.remove());
+    const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; el.parentElement.appendChild(tip);
+    el.querySelectorAll('.hit').forEach(r => {
+      const v = vals[+r.dataset.i];
+      r.addEventListener('mouseenter', () => { const sv = el.querySelector('svg').getBoundingClientRect(), pb = el.parentElement.getBoundingClientRect(), rb = r.getBoundingClientRect();
+        tip.textContent = `w/e ${day(v.we)}: ${v.y == null ? '–' : fmt(v.y, true)}`; tip.style.left = (rb.left - pb.left + rb.width / 2) + 'px'; tip.style.top = (Math.min(rb.bottom, sv.top + (y(v.y || 0) / h) * sv.height) - pb.top - 6) + 'px'; tip.hidden = false; });
+      r.addEventListener('mouseleave', () => tip.hidden = true);
+      r.addEventListener('click', () => pickWeek(v.we));
+    });
+  }
+  function charts() {
+    bars(R('cSales'), 'Paid sales', W.map(w => ({ we: w.we, y: w.sales })), n => fmtInt(n));
+    bars(R('cPay'), 'Team earnings', W.map(w => ({ we: w.we, y: w.pay })), (n, full) => full ? fmtGBP(n) : (n >= 1000 ? '£' + (n / 1000).toFixed(n % 1000 ? 1 : 0) + 'k' : '£' + n));
+    bars(R('cFail'), 'Fail rate', W.map(w => ({ we: w.we, y: pct(w.fails, w.sales) })), (n, full) => full ? fmtPct(n) : Math.round(n) + '%');
+  }
+  let sortKey = 'pay', sortDir = -1;
+  const cols = [
+    { k: 'name', t: 'Name' }, { k: 'now', t: 'This week', n: 1, g: 1 }, { k: 'lastw', t: 'Last week', n: 1 },
+    { k: 'sales', t: 'Paid sales', n: 1, g: 1 }, { k: 'fails', t: 'Fails', n: 1 }, { k: 'fr', t: 'Fail rate', n: 1 }, { k: 'pay', t: 'Earnings', n: 1 },
+    { k: 'avg', t: 'Avg / week (4 wks)', n: 1, g: 1 },
+  ];
+  function rows() {
+    const i = W.findIndex(w => w.we === selWE), four = W.slice(Math.max(0, i - 3), i + 1).map(w => w.we);
+    return D.members.map(m => {
+      const e = m.earn[selWE] || {};
+      const worked = four.map(we => m.earn[we]).filter(x => x && (x.sales || x.pay));
+      const lc = cur && cur.members[m.id], ll = last && last.members[m.id];
+      return { ...m, now: lc ? lc.sales : null, lastw: ll ? ll.sales : null, sales: e.sales ?? null, fails: e.fails ?? null,
+        fr: e.sales != null ? pct(e.fails, e.sales) : null, pay: e.pay ?? null,
+        avg: worked.length ? worked.reduce((a, x) => a + x.pay, 0) / worked.length : null };
+    });
+  }
+  function table() {
+    const tb = root.querySelector('table.members');
+    const list = rows().sort((a, b) => {
+      const x = a[sortKey], y = b[sortKey];
+      if (sortKey === 'name') return sortDir * String(x).localeCompare(y);
+      if (x == null && y == null) return a.name.localeCompare(b.name);
+      if (x == null) return 1; if (y == null) return -1; return sortDir * (x - y);
+    });
+    const dash = '<span class="dim">–</span>';
+    tb.tHead.innerHTML = `<tr><th></th><th class="n grp" colspan="2">Owner IQ</th><th class="n grp" colspan="4">Earnings w/e ${day(selWE)}</th><th class="grp"></th></tr><tr>` +
+      cols.map(c => `<th class="${c.n ? 'n' : ''}${c.g ? ' grp' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
+    tb.tBodies[0].innerHTML = list.map(r => `<tr>
+      <td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc([r.sub, r.stage].filter(Boolean).join(' · '))}</small></div></td>
+      <td class="n grp">${r.now ?? dash}</td><td class="n">${r.lastw ?? dash}</td>
+      <td class="n grp">${r.sales ?? dash}</td><td class="n">${r.fails ?? dash}</td>
+      <td class="n">${r.fr == null ? dash : `<span class="pill ${failPill(r.fr)}">${fmtPct(r.fr)}</span>`}</td>
+      <td class="n">${r.pay == null ? dash : fmtGBP(r.pay)}</td>
+      <td class="n grp">${r.avg == null ? dash : fmtGBP(r.avg)}</td></tr>`).join('');
+    tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => {
+      if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = b.dataset.k === 'name' ? 1 : -1; } table(); });
+  }
+  function draw() { earnTiles(); charts(); table(); }
+  draw();
+}
+
+// ---------- Admin ----------
+$('#adminBtn').onclick = () => { show('adminView'); loadAccess(); };
+$('#adminBack').onclick = () => openTeam($('#teamPick').value || teams[0].slug);
+const teamOptions = sel => `<option value="">No team</option>` + teams.map(t => `<option value="${esc(t.slug)}"${t.slug === sel ? ' selected' : ''}>${' '.repeat(t.ancestors.length)}${esc(t.name)}</option>`).join('');
+async function loadAccess() {
+  $('#addTeam').innerHTML = teamOptions('');
+  const { data, error } = await sb.from('access').select('*').order('email');
+  if (error) return note($('#adminMsg'), error.message, true);
+  $('#accessRows').innerHTML = data.map(a => `<tr data-email="${esc(a.email)}">
+    <td>${esc(a.email)}</td>
+    <td><select aria-label="Team for ${esc(a.email)}" data-f="team">${teamOptions(a.team_slug)}</select></td>
+    <td><input type="checkbox" aria-label="Admin" data-f="admin" ${a.is_admin ? 'checked' : ''} ${a.email === me ? 'disabled' : ''}></td>
+    <td><button class="btn" data-f="del" ${a.email === me ? 'disabled' : ''}>Remove</button></td></tr>`).join('');
+  $('#accessRows').querySelectorAll('tr').forEach(tr => {
+    const email = tr.dataset.email;
+    tr.querySelector('[data-f=team]').onchange = e => save(sb.from('access').update({ team_slug: e.target.value || null }).eq('email', email), `Saved team for ${email}.`);
+    tr.querySelector('[data-f=admin]').onchange = e => save(sb.from('access').update({ is_admin: e.target.checked }).eq('email', email), `Saved admin access for ${email}.`);
+    tr.querySelector('[data-f=del]').onclick = e => {
+      if (e.target.dataset.armed) return save(sb.from('access').delete().eq('email', email), `Removed ${email}. They can no longer see any team.`, true);
+      e.target.dataset.armed = 1; e.target.textContent = 'Click again to remove';
+    };
+  });
+}
+async function save(q, ok, reload) {
+  const { error } = await q;
+  note($('#adminMsg'), error ? error.message : ok, !!error);
+  if (reload || error) loadAccess();
+}
+$('#addForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = $('#addEmail').value.trim().toLowerCase();
+  if (!email.includes('@')) return note($('#adminMsg'), 'Enter the leader\'s email address.', true);
+  const row = { email, team_slug: $('#addTeam').value || null, is_admin: $('#addAdmin').checked };
+  const { error } = await sb.from('access').upsert(row);
+  if (error) return note($('#adminMsg'), error.message, true);
+  note($('#adminMsg'), `Added ${email}. If they don't have a login yet, create one for them in Supabase.`);
+  $('#addForm').reset(); loadAccess();
+});
+
+if (!CFG.supabaseUrl || !CFG.supabaseAnonKey) {
+  show('authView'); $('#authForm').hidden = true;
+  document.querySelector('.auth p').textContent = 'This site isn\'t connected to its database yet. Fill in config.js with the Supabase project URL and anon key.';
+} else boot();
+</script>
+</body>
+</html>

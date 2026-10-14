@@ -95,6 +95,15 @@ th.grp, td.grp { border-left: 1px solid var(--line); }
 .lead { font-size: 11px; color: var(--accent); margin-left: 6px; letter-spacing: .04em; text-transform: uppercase; }
 .dim { color: var(--muted); }
 footer { font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; }
+.view { display: grid; gap: 28px; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); }
+.seg button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-size: 13.5px; color: var(--ink-2); }
+.seg button[aria-pressed=true], .seg button[aria-selected=true] { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pagetabs { justify-self: start; }
+.qctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+table.qtbl { min-width: 520px; }
+.chart .val { fill: var(--ink-2); }
 .subnav { display: flex; flex-wrap: wrap; gap: 8px; }
 .subnav button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
 
@@ -312,23 +321,27 @@ function renderTeam(D) {
       <div class="meta" data-r="meta"></div>
     </div><div class="updated" data-r="updated"></div></div>
   ${kids.length ? `<div class="subnav"><span class="note">Sub-teams:</span>${kids.map(k => `<button data-team="${esc(k.slug)}">${esc(k.name)}</button>`).join('')}</div>` : ''}
+  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Delivery quality</button></div>
+  <div class="view" data-view="main">
   <section class="section"><div class="sec-head"><h2>Sales logged in Owner IQ</h2><p class="note">Live, refreshed every morning</p></div>
     <div class="tiles" data-r="liveTiles"></div></section>
   <section class="section"><div class="sec-head"><h2>Earnings and fails</h2>
       <label class="note">Week ending <select data-r="week" id="weekPick"></select></label></div>
     <div class="tiles" data-r="earnTiles"></div>
     <p class="note">From the Modern Milkman and HelloFresh / Green Chef earnings sheets. Paid sales exclude fails. Fail rate is fails ÷ (paid sales + fails).</p></section>
-  <section class="section" data-r="q4sec" hidden></section>
   <section class="section"><h2>Week by week</h2><div class="charts">
       <div class="chart"><h3>Paid sales</h3><div data-r="cSales"></div></div>
       <div class="chart"><h3>Team earnings (£)</h3><div data-r="cPay"></div></div>
       <div class="chart"><h3>Fail rate (%)</h3><div data-r="cFail"></div></div></div></section>
-  <section class="section"><div class="sec-head"><h2>Your team</h2><p class="note">A dash means no sales or pay that week. Avg / week counts only weeks they worked.<span data-r="q4note"></span></p></div>
+  <section class="section"><div class="sec-head"><h2>Your team</h2><p class="note">A dash means no sales or pay that week. Avg / week counts only weeks they worked.</p></div>
     <div class="tablebox"><table class="members"><thead></thead><tbody></tbody></table></div></section>
+  </div>
+  <div class="view" data-view="quality" hidden></div>
   <footer><div>Team members are the people in this team's spider on Owner IQ today, including its sub-teams. Earlier weeks count only people who are in the team now.</div>
     <div>These numbers are private to YBM. Please don't share screenshots outside your team.</div></footer></div>`;
   root.querySelectorAll('[data-team]').forEach(b => b.onclick = () => openTeam(b.dataset.team));
   const R = n => root.querySelector(`[data-r="${n}"]`);
+  pageTabs(root, D);
 
   const fmtInt = n => n == null ? '–' : Math.round(n).toLocaleString('en-GB');
   const fmtGBP = n => n == null ? '–' : '£' + Math.round(n).toLocaleString('en-GB');
@@ -396,7 +409,7 @@ function renderTeam(D) {
       r.addEventListener('mouseenter', () => { const sv = el.querySelector('svg').getBoundingClientRect(), pb = el.parentElement.getBoundingClientRect(), rb = r.getBoundingClientRect();
         tip.textContent = `w/e ${day(v.we)}: ${v.y == null ? '–' : fmt(v.y, true)}`; tip.style.left = (rb.left - pb.left + rb.width / 2) + 'px'; tip.style.top = (Math.min(rb.bottom, sv.top + (y(v.y || 0) / h) * sv.height) - pb.top - 6) + 'px'; tip.hidden = false; });
       r.addEventListener('mouseleave', () => tip.hidden = true);
-      r.addEventListener('click', () => { if (W.some(w => w.we === v.we)) pickWeek(v.we); });
+      r.addEventListener('click', () => pickWeek(v.we));
     });
   }
   function charts() {
@@ -410,8 +423,6 @@ function renderTeam(D) {
     { k: 'sales', t: 'Paid sales', n: 1, g: 1 }, { k: 'fails', t: 'Fails', n: 1 }, { k: 'fr', t: 'Fail rate', n: 1 }, { k: 'pay', t: 'Earnings', n: 1 },
     { k: 'avg', t: 'Avg / week (4 wks)', n: 1, g: 1 },
   ];
-  const Q = (D.q4 || []).filter(q => q.first > 0), Q4 = Q.slice(-4).map(q => q.we);
-  if (Q.length) cols.push({ k: 'q4', t: '4th del. (4 wks)', n: 1, g: 1 });
   function rows() {
     const i = W.findIndex(w => w.we === selWE), four = W.slice(Math.max(0, i - 3), i + 1).map(w => w.we);
     return D.members.map(m => {
@@ -420,8 +431,7 @@ function renderTeam(D) {
       const lc = cur && cur.members[m.id], ll = last && last.members[m.id];
       return { ...m, now: lc ? lc.sales : null, lastw: ll ? ll.sales : null, sales: e.sales ?? null, fails: e.fails ?? null,
         fr: e.sales != null ? pct(e.fails, e.sales) : null, pay: e.pay ?? null,
-        avg: worked.length ? worked.reduce((a, x) => a + x.pay, 0) / worked.length : null,
-        q4: (() => { const z = Q4.map(we => (m.q4 || {})[we]).filter(Boolean), f = z.reduce((a, x) => a + x.first, 0); return f ? z.reduce((a, x) => a + x.fourth, 0) / f * 100 : null; })() };
+        avg: worked.length ? worked.reduce((a, x) => a + x.pay, 0) / worked.length : null };
     });
   }
   function table() {
@@ -433,7 +443,7 @@ function renderTeam(D) {
       if (x == null) return 1; if (y == null) return -1; return sortDir * (x - y);
     });
     const dash = '<span class="dim">–</span>';
-    tb.tHead.innerHTML = `<tr><th></th><th class="n grp" colspan="2">Owner IQ</th><th class="n grp" colspan="4">Earnings w/e ${day(selWE)}</th><th class="grp"></th>${Q.length ? '<th class="grp"></th>' : ''}</tr><tr>` +
+    tb.tHead.innerHTML = `<tr><th></th><th class="n grp" colspan="2">Owner IQ</th><th class="n grp" colspan="4">Earnings w/e ${day(selWE)}</th><th class="grp"></th></tr><tr>` +
       cols.map(c => `<th class="${c.n ? 'n' : ''}${c.g ? ' grp' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
     tb.tBodies[0].innerHTML = list.map(r => `<tr>
       <td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc([r.sub, r.stage].filter(Boolean).join(' · '))}</small></div></td>
@@ -441,29 +451,104 @@ function renderTeam(D) {
       <td class="n grp">${r.sales ?? dash}</td><td class="n">${r.fails ?? dash}</td>
       <td class="n">${r.fr == null ? dash : `<span class="pill ${failPill(r.fr)}">${fmtPct(r.fr)}</span>`}</td>
       <td class="n">${r.pay == null ? dash : fmtGBP(r.pay)}</td>
-      <td class="n grp">${r.avg == null ? dash : fmtGBP(r.avg)}</td>${Q.length ? `<td class="n grp">${r.q4 == null ? dash : fmtPct(r.q4)}</td>` : ''}</tr>`).join('');
+      <td class="n grp">${r.avg == null ? dash : fmtGBP(r.avg)}</td></tr>`).join('');
     tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => {
       if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = b.dataset.k === 'name' ? 1 : -1; } table(); });
   }
-  function q4() {
-    const sec = R('q4sec');
-    if (!Q.length) return;
-    sec.hidden = false;
-    R('q4note').textContent = ' 4th delivery is the share of their Modern Milkman customers still taking a 4th delivery, over the last 4 sign-up weeks.';
-    const lq = Q[Q.length - 1], pq = Q[Q.length - 2], four = Q.slice(-4);
-    const rt = q => q.first ? q.fourth / q.first * 100 : null;
-    const f4 = four.reduce((a, q) => a + q.first, 0), d4 = four.reduce((a, q) => a + q.fourth, 0);
-    sec.innerHTML = `<div class="sec-head"><h2>4th delivery quality</h2><p class="note">Modern Milkman · share of new customers still taking their 4th delivery</p></div>
-      <div class="tiles">
-        <div class="tile"><div class="k">Latest week</div><div class="v">${fmtPct(rt(lq))}</div><div class="s">w/e ${day(lq.we)} · ${fmtInt(lq.fourth)} of ${fmtInt(lq.first)}</div></div>
-        ${pq ? `<div class="tile"><div class="k">Week before</div><div class="v">${fmtPct(rt(pq))}</div><div class="s">w/e ${day(pq.we)} · ${fmtInt(pq.fourth)} of ${fmtInt(pq.first)}</div></div>` : ''}
-        <div class="tile"><div class="k">Last 4 weeks</div><div class="v">${fmtPct(f4 ? d4 / f4 * 100 : null)}</div><div class="s">${fmtInt(d4)} of ${fmtInt(f4)} customers</div></div>
-      </div>
-      <div class="charts"><div class="chart"><h3>4th delivery rate by sign-up week</h3><div class="q4c"></div></div></div>`;
-    bars(sec.querySelector('.q4c'), '4th delivery rate', Q.map(q => ({ we: q.we, y: rt(q) })), (n, full) => full ? fmtPct(n) : Math.round(n) + '%');
-  }
-  function draw() { q4(); earnTiles(); charts(); table(); }
+  function draw() { earnTiles(); charts(); table(); }
   draw();
+}
+
+// ---- Delivery quality page: Modern Milkman 4th-delivery exports, by week or by month
+function qualityView(el, D) {
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fInt = n => n == null ? '–' : Math.round(n).toLocaleString('en-GB');
+  const fPct = p => p == null ? '–' : p.toFixed(1) + '%';
+  const day = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const mon = (ym, o) => new Date(ym + '-15T12:00:00Z').toLocaleDateString('en-GB', { month: o ? 'short' : 'long', year: o ? undefined : 'numeric', timeZone: 'UTC' });
+  const rate = x => x && x.first ? x.fourth / x.first * 100 : null;
+  const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} };
+  const Q = (D.q4 || []).filter(q => q.first > 0), teamQ = Object.fromEntries(Q.map(q => [q.we, q]));
+  const sum = (weeks, get) => weeks.reduce((a, we) => { const x = get(we); if (x) { a.first += x.first; a.fourth += x.fourth; } return a; }, { first: 0, fourth: 0 });
+  // A period is one sign-up week, or a calendar month of sign-up weeks grouped by week-ending date.
+  const periods = m => {
+    if (m === 'week') return Q.map(q => ({ key: q.we, label: 'w/e ' + day(q.we), short: day(q.we), weeks: [q.we] }));
+    const g = {}; Q.forEach(q => (g[q.we.slice(0, 7)] ||= []).push(q.we));
+    return Object.keys(g).sort().map(k => ({ key: k, label: mon(k), short: mon(k, 1), weeks: g[k] }));
+  };
+  let mode = ls('ybm-q-mode') === 'month' ? 'month' : 'week', P, sel, sortKey = 'rate', sortDir = -1;
+  el.innerHTML = `<section class="section">
+    <div class="sec-head"><h2>4th delivery quality</h2>
+      <div class="qctl"><div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
+      <select aria-label="Period"></select></div></div>
+    <div class="tiles" data-q="tiles"></div>
+    <p class="note">Modern Milkman only. Of the customers signed up in a week, how many still took a delivery in their 4th week. Monthly adds up the sign-up weeks that end in that month.</p></section>
+  <div class="chart"><h3 data-q="ctitle"></h3><div data-q="chart"></div></div>
+  <section class="section"><div class="sec-head"><h2 data-q="ttitle"></h2><p class="note" data-q="tnote"></p></div>
+    <div class="tablebox"><table class="qtbl"><thead></thead><tbody></tbody></table></div></section>`;
+  const $q = n => el.querySelector(`[data-q="${n}"]`), selEl = el.querySelector('select');
+  el.querySelectorAll('.seg button').forEach(b => b.onclick = () => { mode = b.dataset.m; ls('ybm-q-mode', mode); setup(); });
+  selEl.onchange = () => { sel = selEl.value; draw(); };
+  function setup() {
+    P = periods(mode); sel = P[P.length - 1].key;
+    el.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === mode));
+    selEl.innerHTML = ''; P.slice().reverse().forEach(p => selEl.add(new Option(p.label, p.key))); selEl.value = sel;
+    draw();
+  }
+  function draw() {
+    const i = P.findIndex(p => p.key === sel), p = P[i], pp = P[i - 1];
+    const t = sum(p.weeks, we => teamQ[we]), r = rate(t), rp = pp ? rate(sum(pp.weeks, we => teamQ[we])) : null;
+    const d = rp == null || r == null ? p.label : `<span class="${r >= rp ? 'up' : 'down'}">${r >= rp ? '▲' : '▼'} ${Math.abs(r - rp).toFixed(1)} pts</span> vs ${esc(pp.label)}`;
+    $q('tiles').innerHTML = `
+      <div class="tile"><div class="k">4th delivery rate</div><div class="v">${fPct(r)}</div><div class="s">${d}</div></div>
+      <div class="tile"><div class="k">New customers</div><div class="v">${fInt(t.first)}</div><div class="s">Took a 1st week delivery</div></div>
+      <div class="tile"><div class="k">Still on in week 4</div><div class="v">${fInt(t.fourth)}</div><div class="s">Took a 4th week delivery</div></div>
+      <div class="tile"><div class="k">Dropped off</div><div class="v">${fInt(Math.max(0, t.first - t.fourth))}</div><div class="s">No delivery in week 4</div></div>`;
+    $q('ctitle').textContent = `4th delivery rate by ${mode}`;
+    chart($q('chart'), P.map(x => ({ key: x.key, label: x.short, full: x.label, y: rate(sum(x.weeks, we => teamQ[we])) })));
+    $q('ttitle').textContent = `Your team · ${p.label}`;
+    table(p);
+  }
+  function chart(box, vals) {
+    const w = box.clientWidth && box.clientWidth < 520 ? 380 : 640, h = w < 640 ? 220 : 190, L = 40, R = 6, T = 14, B = 22, y = v => T + (h - T - B) * (1 - v / 100);
+    const bw = (w - L - R) / vals.length, bwd = Math.min(bw - 4, 72), k = Math.ceil(vals.length / (w < 640 ? 4 : 8));
+    let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="4th delivery rate by ${mode}">`;
+    for (let g = 0; g <= 100; g += 25) s += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${g}%</text>`;
+    vals.forEach((v, i) => {
+      const cx = L + i * bw + bw / 2, x = cx - bwd / 2, bh = v.y == null ? 0 : y(0) - y(v.y), r = Math.min(4, bh / 2);
+      if (bh > 0) s += `<path class="bar${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
+      if (v.y != null && vals.length <= 12) s += `<text class="axis val" x="${cx}" y="${y(v.y) - 5}" text-anchor="middle">${Math.round(v.y)}%</text>`;
+      if (i % k === 0 || i === vals.length - 1) s += `<text class="axis" x="${cx}" y="${h - 6}" text-anchor="middle">${esc(v.label)}</text>`;
+      s += `<rect class="hit" x="${L + i * bw}" y="${T}" width="${bw}" height="${h - T - B}" data-i="${i}"><title>${esc(v.full)}: ${fPct(v.y)}</title></rect>`;
+    });
+    box.innerHTML = s + '</svg>';
+    box.querySelectorAll('.hit').forEach(r => r.onclick = () => { sel = selEl.value = vals[+r.dataset.i].key; draw(); });
+  }
+  function table(p) {
+    const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: [m.sub, m.stage].filter(Boolean).join(' · '), ...sum(p.weeks, we => (m.q4 || {})[we]) }))
+      .filter(r => r.first > 0).map(r => ({ ...r, rate: rate(r), lost: Math.max(0, r.first - r.fourth) }));
+    const others = D.members.length - rows.length;
+    rows.sort((a, b) => sortKey === 'name' ? sortDir * a.name.localeCompare(b.name) : (sortDir * (a[sortKey] - b[sortKey]) || a.name.localeCompare(b.name)));
+    const cols = [{ k: 'name', t: 'Name' }, { k: 'first', t: 'New customers', n: 1 }, { k: 'fourth', t: 'Still on in week 4', n: 1 }, { k: 'lost', t: 'Dropped off', n: 1 }, { k: 'rate', t: '4th delivery rate', n: 1 }];
+    const tb = el.querySelector('.qtbl');
+    tb.tHead.innerHTML = '<tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
+    tb.tBodies[0].innerHTML = rows.length ? rows.map(r => `<tr><td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc(r.sub)}</small></div></td>
+      <td class="n">${fInt(r.first)}</td><td class="n">${fInt(r.fourth)}</td><td class="n">${fInt(r.lost)}</td><td class="n">${fPct(r.rate)}</td></tr>`).join('')
+      : `<tr><td colspan="5" class="dim">Nobody in this team had Modern Milkman sign-ups in ${esc(p.label)}.</td></tr>`;
+    tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => { if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = sortKey === 'name' ? 1 : -1; } table(p); });
+    $q('tnote').textContent = others ? `${others} other ${others === 1 ? 'person has' : 'people have'} no Modern Milkman sign-ups in this ${mode}.` : '';
+  }
+  setup();
+}
+// Page tabs: "Sales & earnings" and "Delivery quality". Teams with no quality data keep the single page.
+function pageTabs(root, D) {
+  const bar = root.querySelector('.pagetabs'), main = root.querySelector('[data-view="main"]'), qv = root.querySelector('[data-view="quality"]');
+  if (!(D.q4 || []).some(q => q.first > 0)) { bar.hidden = true; qv.hidden = true; return; }
+  qualityView(qv, D);
+  const show = t => { bar.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); main.hidden = t !== 'main'; qv.hidden = t !== 'quality'; try { localStorage.setItem('ybm-tab', t); } catch (e) {} };
+  bar.querySelectorAll('button').forEach(b => b.onclick = () => show(b.dataset.tab));
+  let t = 'main'; try { if (localStorage.getItem('ybm-tab') === 'quality') t = 'quality'; } catch (e) {}
+  show(t);
 }
 
 // ---------- Admin ----------

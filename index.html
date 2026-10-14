@@ -321,7 +321,7 @@ function renderTeam(D) {
       <div class="meta" data-r="meta"></div>
     </div><div class="updated" data-r="updated"></div></div>
   ${kids.length ? `<div class="subnav"><span class="note">Sub-teams:</span>${kids.map(k => `<button data-team="${esc(k.slug)}">${esc(k.name)}</button>`).join('')}</div>` : ''}
-  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Quality</button></div>
+  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Quality</button><button role="tab" data-tab="doors">Doors knocked</button></div>
   <div class="view" data-view="main">
   <section class="section"><div class="sec-head"><h2>Sales logged in Owner IQ</h2><p class="note">Live, refreshed every morning</p></div>
     <div class="tiles" data-r="liveTiles"></div></section>
@@ -337,6 +337,7 @@ function renderTeam(D) {
     <div class="tablebox"><table class="members"><thead></thead><tbody></tbody></table></div></section>
   </div>
   <div class="view" data-view="quality" hidden></div>
+  <div class="view" data-view="doors" hidden></div>
   <footer><div>Team members are the people in this team's spider on Owner IQ today, including its sub-teams. Earlier weeks count only people who are in the team now.</div>
     <div>These numbers are private to YBM. Please don't share screenshots outside your team.</div></footer></div>`;
   root.querySelectorAll('[data-team]').forEach(b => b.onclick = () => openTeam(b.dataset.team));
@@ -554,14 +555,106 @@ function qualityView(el, D) {
   }
   setup();
 }
-// Page tabs: "Sales & earnings" and "Delivery quality". Teams with no quality data keep the single page.
+// ---- Doors knocked page: Modern Milkman weekly BA performance exports, by week or by month
+function doorsView(el, D) {
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fInt = n => n == null ? '–' : Math.round(n).toLocaleString('en-GB');
+  const fPct = p => p == null ? '–' : p.toFixed(1) + '%';
+  const fGBP = n => n == null ? '–' : '£' + n.toFixed(2);
+  const day = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const mon = (ym, o) => new Date(ym + '-15T12:00:00Z').toLocaleDateString('en-GB', { month: o ? 'short' : 'long', year: o ? undefined : 'numeric', timeZone: 'UTC' });
+  const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} };
+  const W = (D.mmp || []).filter(w => w.doors > 0 || w.sales > 0), byWe = Object.fromEntries(W.map(w => [w.we, w]));
+  // Totals over some weeks; AOV and drops are weighted by sales, as in the client's own totals.
+  const sum = list => { const a = { sales: 0, doors: 0, memb: 0, aovS: 0, dropS: 0 };
+    list.forEach(x => { if (!x) return; a.sales += x.sales; a.doors += x.doors; a.memb += x.memb; a.aovS += (x.aov || 0) * x.sales; a.dropS += (x.drops || 0) * x.sales; });
+    return { ...a, per100: a.doors ? a.sales / a.doors * 100 : null, mpct: a.sales ? a.memb / a.sales * 100 : null, aov: a.sales ? a.aovS / a.sales : null, drops: a.sales ? a.dropS / a.sales : null }; };
+  const periods = m => {
+    if (m === 'week') return W.map(w => ({ key: w.we, label: 'w/e ' + day(w.we), short: day(w.we), weeks: [w.we] }));
+    const g = {}; W.forEach(w => (g[w.we.slice(0, 7)] ||= []).push(w.we));
+    return Object.keys(g).sort().map(k => ({ key: k, label: mon(k), short: mon(k, 1), weeks: g[k] }));
+  };
+  let mode = ls('ybm-d-mode') === 'month' ? 'month' : 'week', P, sel, sortKey = 'doors', sortDir = -1;
+  el.innerHTML = `<section class="section">
+    <div class="sec-head"><h2>Doors knocked · Modern Milkman</h2>
+      <div class="qctl"><div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
+      <select aria-label="Period"></select></div></div>
+    <div class="tiles" data-q="tiles"></div>
+    <p class="note">From the Modern Milkman weekly performance reports. Sales per 100 doors is sales ÷ doors knocked × 100. Average order and drops are averaged over sales.</p></section>
+  <div class="charts"><div class="chart"><h3>Doors knocked</h3><div data-q="c1"></div></div><div class="chart"><h3>Sales per 100 doors</h3><div data-q="c2"></div></div></div>
+  <section class="section"><div class="sec-head"><h2 data-q="ttitle"></h2><p class="note" data-q="tnote"></p></div>
+    <div class="tablebox"><table class="qtbl"><thead></thead><tbody></tbody></table></div></section>`;
+  const $q = n => el.querySelector(`[data-q="${n}"]`), selEl = el.querySelector('select');
+  el.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { mode = b.dataset.m; ls('ybm-d-mode', mode); setup(); });
+  selEl.onchange = () => { sel = selEl.value; draw(); };
+  function setup() {
+    P = periods(mode); sel = P[P.length - 1].key;
+    el.querySelectorAll('[data-m]').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === mode));
+    selEl.innerHTML = ''; P.slice().reverse().forEach(p => selEl.add(new Option(p.label, p.key))); selEl.value = sel;
+    draw();
+  }
+  function draw() {
+    const i = P.findIndex(p => p.key === sel), p = P[i], pp = P[i - 1];
+    const t = sum(p.weeks.map(we => byWe[we])), tp = pp ? sum(pp.weeks.map(we => byWe[we])) : null;
+    const cmp = (a, b, f, unit) => a == null || b == null ? '' : `<span class="${a >= b ? 'up' : 'down'}">${a >= b ? '▲' : '▼'} ${f(Math.abs(a - b))}${unit || ''}</span> vs ${esc(pp.label)}`;
+    $q('tiles').innerHTML = `
+      <div class="tile"><div class="k">Doors knocked</div><div class="v">${fInt(t.doors)}</div><div class="s">${cmp(t.doors, tp && tp.doors, fInt) || p.label}</div></div>
+      <div class="tile"><div class="k">Sales</div><div class="v">${fInt(t.sales)}</div><div class="s">${cmp(t.sales, tp && tp.sales, fInt)}</div></div>
+      <div class="tile"><div class="k">Sales per 100 doors</div><div class="v">${t.per100 == null ? '–' : t.per100.toFixed(2)}</div><div class="s">${cmp(t.per100, tp && tp.per100, x => x.toFixed(2))}</div></div>
+      <div class="tile"><div class="k">Memberships on sign-up</div><div class="v">${fPct(t.mpct)}</div><div class="s">${fInt(t.memb)} of ${fInt(t.sales)} sales</div></div>
+      <div class="tile"><div class="k">Average order</div><div class="v">${fGBP(t.aov)}</div><div class="s">${t.drops == null ? '' : t.drops.toFixed(1) + ' drops per sale'}</div></div>`;
+    const tots = P.map(x => ({ key: x.key, label: x.short, full: x.label, t: sum(x.weeks.map(we => byWe[we])) }));
+    chart($q('c1'), tots.map(x => ({ ...x, y: x.t.doors })), fInt);
+    chart($q('c2'), tots.map(x => ({ ...x, y: x.t.per100 })), v => v.toFixed(1));
+    $q('ttitle').textContent = `Your team · ${p.label}`;
+    table(p);
+  }
+  function chart(box, vals, fmt) {
+    const w = box.clientWidth && box.clientWidth < 420 ? 380 : 480, h = 190, L = 44, R = 6, T = 14, B = 22;
+    const max = Math.max(1e-9, ...vals.map(v => v.y || 0)), step = Math.pow(10, Math.floor(Math.log10(max)));
+    const nice = [1, 2, 2.5, 5, 10].map(m => m * step).find(m => max / m <= 4) || step * 10, top = Math.ceil(max / nice) * nice;
+    const y = v => T + (h - T - B) * (1 - v / top), bw = (w - L - R) / vals.length, bwd = Math.min(bw - 4, 64), k = Math.ceil(vals.length / (w < 480 ? 4 : 6));
+    let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(box.previousElementSibling.textContent)} by ${mode}">`;
+    for (let g = 0; g <= top + 1e-9; g += nice) s += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${fmt(g)}</text>`;
+    vals.forEach((v, i) => {
+      const cx = L + i * bw + bw / 2, x = cx - bwd / 2, bh = v.y ? y(0) - y(v.y) : 0, r = Math.min(4, bh / 2), lastL = i === vals.length - 1;
+      if (bh > 0) s += `<path class="bar${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
+      if ((i % k === 0 && vals.length - 1 - i >= k) || lastL) s += `<text class="axis" x="${lastL && k > 1 ? w - R : cx}" y="${h - 6}" text-anchor="${lastL && k > 1 ? 'end' : 'middle'}">${esc(v.label)}</text>`;
+      s += `<rect class="hit" x="${L + i * bw}" y="${T}" width="${bw}" height="${h - T - B}" data-i="${i}"><title>${esc(v.full)}: ${v.y == null ? '–' : fmt(v.y)}</title></rect>`;
+    });
+    box.innerHTML = s + '</svg>';
+    box.querySelectorAll('.hit').forEach(r => r.onclick = () => { sel = selEl.value = vals[+r.dataset.i].key; draw(); });
+  }
+  function table(p) {
+    const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: [m.sub, m.stage].filter(Boolean).join(' · '), ...sum(p.weeks.map(we => (m.mmp || {})[we])) }))
+      .filter(r => r.doors > 0 || r.sales > 0).map(r => ({ ...r, per100: r.doors >= 50 ? r.per100 : null }));   // a handful of doors makes the rate meaningless
+    const others = D.members.length - rows.length;
+    rows.sort((a, b) => sortKey === 'name' ? sortDir * a.name.localeCompare(b.name) : (sortDir * ((a[sortKey] ?? -1) - (b[sortKey] ?? -1)) || a.name.localeCompare(b.name)));
+    const cols = [{ k: 'name', t: 'Name' }, { k: 'doors', t: 'Doors knocked', n: 1 }, { k: 'sales', t: 'Sales', n: 1 }, { k: 'per100', t: 'Per 100 doors', n: 1 },
+      { k: 'mpct', t: 'Membership %', n: 1 }, { k: 'aov', t: 'Avg order', n: 1 }, { k: 'drops', t: 'Drops', n: 1 }];
+    const tb = el.querySelector('.qtbl');
+    tb.tHead.innerHTML = '<tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
+    tb.tBodies[0].innerHTML = rows.length ? rows.map(r => `<tr><td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc(r.sub)}</small></div></td>
+      <td class="n">${fInt(r.doors)}</td><td class="n">${fInt(r.sales)}</td><td class="n">${r.per100 == null ? '–' : r.per100.toFixed(2)}</td>
+      <td class="n">${fPct(r.mpct)}</td><td class="n">${fGBP(r.aov)}</td><td class="n">${r.drops == null ? '–' : r.drops.toFixed(1)}</td></tr>`).join('')
+      : `<tr><td colspan="7" class="dim">Nobody in this team worked Modern Milkman in ${esc(p.label)}.</td></tr>`;
+    tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => { if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = sortKey === 'name' ? 1 : -1; } table(p); });
+    $q('tnote').textContent = others ? `${others} other ${others === 1 ? 'person has' : 'people have'} no Modern Milkman report in this ${mode}.` : '';
+  }
+  setup();
+}
+// Page tabs: "Sales & earnings", "Quality" and "Doors knocked"; a tab only shows when the team has its data.
 function pageTabs(root, D) {
-  const bar = root.querySelector('.pagetabs'), main = root.querySelector('[data-view="main"]'), qv = root.querySelector('[data-view="quality"]');
-  if (![D.q4, D.hf2].some(x => (x || []).some(q => q.first > 0))) { bar.hidden = true; qv.hidden = true; return; }
-  qualityView(qv, D);
-  const show = t => { bar.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); main.hidden = t !== 'main'; qv.hidden = t !== 'quality'; try { localStorage.setItem('ybm-tab', t); } catch (e) {} };
+  const bar = root.querySelector('.pagetabs'), has = a => (a || []).some(x => x.first > 0 || x.doors > 0 || x.sales > 0);
+  const views = { main: () => {}, quality: el => qualityView(el, D), doors: el => doorsView(el, D) };
+  const ok = { main: true, quality: has(D.q4) || has(D.hf2), doors: has(D.mmp) };
+  const tabs = Object.keys(views).filter(t => ok[t]);
+  bar.querySelectorAll('button').forEach(b => b.hidden = !ok[b.dataset.tab]);
+  Object.keys(views).forEach(t => { const v = root.querySelector(`[data-view="${t}"]`); v.hidden = t !== 'main'; if (ok[t] && t !== 'main') views[t](v); });
+  if (tabs.length < 2) { bar.hidden = true; return; }
+  const show = t => { bar.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); tabs.forEach(x => root.querySelector(`[data-view="${x}"]`).hidden = x !== t); try { localStorage.setItem('ybm-tab', t); } catch (e) {} };
   bar.querySelectorAll('button').forEach(b => b.onclick = () => show(b.dataset.tab));
-  let t = 'main'; try { if (localStorage.getItem('ybm-tab') === 'quality') t = 'quality'; } catch (e) {}
+  let t = 'main'; try { const s = localStorage.getItem('ybm-tab'); if (tabs.includes(s)) t = s; } catch (e) {}
   show(t);
 }
 

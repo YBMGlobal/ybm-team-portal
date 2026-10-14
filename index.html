@@ -70,6 +70,8 @@ h2 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: va
 .up { color: var(--good); } .down { color: var(--bad); }
 .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
 .pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+.tile .v.good { color: var(--good); } .tile .v.warn { color: var(--warn); } .tile .v.bad { color: var(--bad); }
+.chart .bar.good { fill: var(--good); } .chart .bar.warn { fill: var(--warn); } .chart .bar.bad { fill: var(--bad); }
 .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 8px; min-width: 0; position: relative; }
 .chart h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
@@ -321,7 +323,7 @@ function renderTeam(D) {
       <div class="meta" data-r="meta"></div>
     </div><div class="updated" data-r="updated"></div></div>
   ${kids.length ? `<div class="subnav"><span class="note">Sub-teams:</span>${kids.map(k => `<button data-team="${esc(k.slug)}">${esc(k.name)}</button>`).join('')}</div>` : ''}
-  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Quality</button><button role="tab" data-tab="doors">Doors knocked</button></div>
+  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Quality</button><button role="tab" data-tab="doors">Milkman stats</button></div>
   <div class="view" data-view="main">
   <section class="section"><div class="sec-head"><h2>Sales logged in Owner IQ</h2><p class="note">Live, refreshed every morning</p></div>
     <div class="tiles" data-r="liveTiles"></div></section>
@@ -470,9 +472,9 @@ function qualityView(el, D) {
   const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} };
   // Each client measures quality at a different point: Modern Milkman at the 4th weekly delivery, HelloFresh at the 2nd box.
   const SRC = {
-    mm: { name: 'Modern Milkman', rows: D.q4 || [], mem: m => m.q4, b: 'fourth', rateT: '4th delivery rate', bT: 'Still on in week 4', bS: 'Took a 4th week delivery', aS: 'Took a 1st week delivery', dS: 'No delivery in week 4',
+    mm: { name: 'Modern Milkman', rows: D.q4 || [], mem: m => m.q4, b: 'fourth', band: v => v == null ? '' : v >= 70 ? 'good' : v >= 60 ? 'warn' : 'bad', rateT: '4th delivery rate', bT: 'Still on in week 4', bS: 'Took a 4th week delivery', aS: 'Took a 1st week delivery', dS: 'No delivery in week 4',
           note: 'Modern Milkman: of the customers signed up in a week, how many still took a delivery in their 4th week.' },
-    hf: { name: 'HelloFresh', rows: D.hf2 || [], mem: m => m.hf2, b: 'second', rateT: '2nd box rate', bT: 'Got a 2nd box', bS: 'Took their 2nd box', aS: 'Got a 1st box', dS: 'No 2nd box',
+    hf: { name: 'HelloFresh', rows: D.hf2 || [], mem: m => m.hf2, b: 'second', band: v => v == null ? '' : v >= 70 ? 'good' : v >= 65 ? 'warn' : 'bad', rateT: '2nd box rate', bT: 'Got a 2nd box', bS: 'Took their 2nd box', aS: 'Got a 1st box', dS: 'No 2nd box',
           note: 'HelloFresh: of the customers signed up in a week, how many went on to take their 2nd box. The latest weeks can still rise while 2nd boxes go out.' },
   };
   const have = Object.keys(SRC).filter(k => SRC[k].rows.some(q => q.first > 0));
@@ -514,12 +516,12 @@ function qualityView(el, D) {
     const t = sum(p.weeks, we => teamQ[we]), r = rate(t), rp = pp ? rate(sum(pp.weeks, we => teamQ[we])) : null;
     const d = rp == null || r == null ? p.label : `<span class="${r >= rp ? 'up' : 'down'}">${r >= rp ? '▲' : '▼'} ${Math.abs(r - rp).toFixed(1)} pts</span> vs ${esc(pp.label)}`;
     $q('tiles').innerHTML = `
-      <div class="tile"><div class="k">${S.rateT}</div><div class="v">${fPct(r)}</div><div class="s">${d}</div></div>
+      <div class="tile"><div class="k">${S.rateT}</div><div class="v ${S.band(r)}">${fPct(r)}</div><div class="s">${d}</div></div>
       <div class="tile"><div class="k">New customers</div><div class="v">${fInt(t.first)}</div><div class="s">${S.aS}</div></div>
       <div class="tile"><div class="k">${S.bT}</div><div class="v">${fInt(t[S.b])}</div><div class="s">${S.bS}</div></div>
       <div class="tile"><div class="k">Dropped off</div><div class="v">${fInt(Math.max(0, t.first - t[S.b]))}</div><div class="s">${S.dS}</div></div>`;
     $q('ctitle').textContent = `${S.rateT} by ${mode}`;
-    chart($q('chart'), P.map(x => ({ key: x.key, label: x.short, full: x.label, y: rate(sum(x.weeks, we => teamQ[we])) })));
+    chart($q('chart'), P.map(x => ({ key: x.key, label: x.short, full: x.label, y: rate(sum(x.weeks, we => teamQ[we])) })).map(v => ({ ...v, c: S.band(v.y) })));
     $q('ttitle').textContent = `Your team · ${p.label}`;
     table(p);
   }
@@ -530,7 +532,7 @@ function qualityView(el, D) {
     for (let g = 0; g <= 100; g += 25) s += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${g}%</text>`;
     vals.forEach((v, i) => {
       const cx = L + i * bw + bw / 2, x = cx - bwd / 2, bh = v.y == null ? 0 : y(0) - y(v.y), r = Math.min(4, bh / 2);
-      if (bh > 0) s += `<path class="bar${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
+      if (bh > 0) s += `<path class="bar${v.c ? ' ' + v.c : ''}${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
       if (v.y != null && vals.length <= 12) s += `<text class="axis val" x="${cx}" y="${y(v.y) - 5}" text-anchor="middle">${Math.round(v.y)}%</text>`;
       const lastL = i === vals.length - 1;
       if ((i % k === 0 && vals.length - 1 - i >= k) || lastL) s += `<text class="axis" x="${lastL && k > 1 ? w - R : cx}" y="${h - 6}" text-anchor="${lastL && k > 1 ? 'end' : 'middle'}">${esc(v.label)}</text>`;
@@ -548,14 +550,14 @@ function qualityView(el, D) {
     const tb = el.querySelector('.qtbl');
     tb.tHead.innerHTML = '<tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
     tb.tBodies[0].innerHTML = rows.length ? rows.map(r => `<tr><td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc(r.sub)}</small></div></td>
-      <td class="n">${fInt(r.first)}</td><td class="n">${fInt(r.kept)}</td><td class="n">${fInt(r.lost)}</td><td class="n">${fPct(r.rate)}</td></tr>`).join('')
+      <td class="n">${fInt(r.first)}</td><td class="n">${fInt(r.kept)}</td><td class="n">${fInt(r.lost)}</td><td class="n">${r.rate == null ? '–' : `<span class="pill ${S.band(r.rate)}">${fPct(r.rate)}</span>`}</td></tr>`).join('')
       : `<tr><td colspan="5" class="dim">Nobody in this team had ${S.name} sign-ups in ${esc(p.label)}.</td></tr>`;
     tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => { if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = sortKey === 'name' ? 1 : -1; } table(p); });
     $q('tnote').textContent = others ? `${others} other ${others === 1 ? 'person has' : 'people have'} no ${S.name} sign-ups in this ${mode}.` : '';
   }
   setup();
 }
-// ---- Doors knocked page: Modern Milkman weekly BA performance exports, by week or by month
+// ---- Milkman page: Modern Milkman weekly BA performance exports (sales, membership, order value), by week or by month
 function doorsView(el, D) {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fInt = n => n == null ? '–' : Math.round(n).toLocaleString('en-GB');
@@ -564,24 +566,27 @@ function doorsView(el, D) {
   const day = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
   const mon = (ym, o) => new Date(ym + '-15T12:00:00Z').toLocaleDateString('en-GB', { month: o ? 'short' : 'long', year: o ? undefined : 'numeric', timeZone: 'UTC' });
   const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} };
-  const W = (D.mmp || []).filter(w => w.doors > 0 || w.sales > 0), byWe = Object.fromEntries(W.map(w => [w.we, w]));
+  // Younes's targets: average order above £12.50; drops 2.5+ green, 2+ orange; membership on sign-up above 75% green, 70-75% orange.
+  const bAov = v => v == null ? '' : v > 12.5 ? 'good' : 'bad', bDrop = v => v == null ? '' : v >= 2.5 ? 'good' : v >= 2 ? 'warn' : 'bad';
+  const bMem = v => v == null ? '' : v > 75 ? 'good' : v >= 70 ? 'warn' : 'bad', pill = (c, txt) => txt === '–' ? txt : `<span class="pill ${c}">${txt}</span>`;
+  const W = (D.mmp || []).filter(w => w.sales > 0), byWe = Object.fromEntries(W.map(w => [w.we, w]));
   // Totals over some weeks; AOV and drops are weighted by sales, as in the client's own totals.
-  const sum = list => { const a = { sales: 0, doors: 0, memb: 0, aovS: 0, dropS: 0 };
-    list.forEach(x => { if (!x) return; a.sales += x.sales; a.doors += x.doors; a.memb += x.memb; a.aovS += (x.aov || 0) * x.sales; a.dropS += (x.drops || 0) * x.sales; });
-    return { ...a, per100: a.doors ? a.sales / a.doors * 100 : null, mpct: a.sales ? a.memb / a.sales * 100 : null, aov: a.sales ? a.aovS / a.sales : null, drops: a.sales ? a.dropS / a.sales : null }; };
+  const sum = list => { const a = { sales: 0, memb: 0, aovS: 0, dropS: 0 };
+    list.forEach(x => { if (!x) return; a.sales += x.sales; a.memb += x.memb; a.aovS += (x.aov || 0) * x.sales; a.dropS += (x.drops || 0) * x.sales; });
+    return { ...a, mpct: a.sales ? a.memb / a.sales * 100 : null, aov: a.sales ? a.aovS / a.sales : null, drops: a.sales ? a.dropS / a.sales : null }; };
   const periods = m => {
     if (m === 'week') return W.map(w => ({ key: w.we, label: 'w/e ' + day(w.we), short: day(w.we), weeks: [w.we] }));
     const g = {}; W.forEach(w => (g[w.we.slice(0, 7)] ||= []).push(w.we));
     return Object.keys(g).sort().map(k => ({ key: k, label: mon(k), short: mon(k, 1), weeks: g[k] }));
   };
-  let mode = ls('ybm-d-mode') === 'month' ? 'month' : 'week', P, sel, sortKey = 'doors', sortDir = -1;
+  let mode = ls('ybm-d-mode') === 'month' ? 'month' : 'week', P, sel, sortKey = 'sales', sortDir = -1;
   el.innerHTML = `<section class="section">
-    <div class="sec-head"><h2>Doors knocked · Modern Milkman</h2>
+    <div class="sec-head"><h2>Modern Milkman weekly stats</h2>
       <div class="qctl"><div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
       <select aria-label="Period"></select></div></div>
     <div class="tiles" data-q="tiles"></div>
-    <p class="note">From the Modern Milkman weekly performance reports. Sales per 100 doors is sales ÷ doors knocked × 100. Average order and drops are averaged over sales.</p></section>
-  <div class="charts"><div class="chart"><h3>Doors knocked</h3><div data-q="c1"></div></div><div class="chart"><h3>Sales per 100 doors</h3><div data-q="c2"></div></div></div>
+    <p class="note">From the Modern Milkman weekly performance reports. Average order and drops are averaged over sales.</p></section>
+  <div class="charts"><div class="chart"><h3>Sales</h3><div data-q="c1"></div></div><div class="chart"><h3>Memberships on sign-up (%)</h3><div data-q="c2"></div></div></div>
   <section class="section"><div class="sec-head"><h2 data-q="ttitle"></h2><p class="note" data-q="tnote"></p></div>
     <div class="tablebox"><table class="qtbl"><thead></thead><tbody></tbody></table></div></section>`;
   const $q = n => el.querySelector(`[data-q="${n}"]`), selEl = el.querySelector('select');
@@ -598,14 +603,13 @@ function doorsView(el, D) {
     const t = sum(p.weeks.map(we => byWe[we])), tp = pp ? sum(pp.weeks.map(we => byWe[we])) : null;
     const cmp = (a, b, f, unit) => a == null || b == null ? '' : `<span class="${a >= b ? 'up' : 'down'}">${a >= b ? '▲' : '▼'} ${f(Math.abs(a - b))}${unit || ''}</span> vs ${esc(pp.label)}`;
     $q('tiles').innerHTML = `
-      <div class="tile"><div class="k">Doors knocked</div><div class="v">${fInt(t.doors)}</div><div class="s">${cmp(t.doors, tp && tp.doors, fInt) || p.label}</div></div>
-      <div class="tile"><div class="k">Sales</div><div class="v">${fInt(t.sales)}</div><div class="s">${cmp(t.sales, tp && tp.sales, fInt)}</div></div>
-      <div class="tile"><div class="k">Sales per 100 doors</div><div class="v">${t.per100 == null ? '–' : t.per100.toFixed(2)}</div><div class="s">${cmp(t.per100, tp && tp.per100, x => x.toFixed(2))}</div></div>
-      <div class="tile"><div class="k">Memberships on sign-up</div><div class="v">${fPct(t.mpct)}</div><div class="s">${fInt(t.memb)} of ${fInt(t.sales)} sales</div></div>
-      <div class="tile"><div class="k">Average order</div><div class="v">${fGBP(t.aov)}</div><div class="s">${t.drops == null ? '' : t.drops.toFixed(1) + ' drops per sale'}</div></div>`;
+      <div class="tile"><div class="k">Sales</div><div class="v">${fInt(t.sales)}</div><div class="s">${cmp(t.sales, tp && tp.sales, fInt) || p.label}</div></div>
+      <div class="tile"><div class="k">Memberships on sign-up</div><div class="v ${bMem(t.mpct)}">${fPct(t.mpct)}</div><div class="s">${fInt(t.memb)} of ${fInt(t.sales)} sales</div></div>
+      <div class="tile"><div class="k">Average order</div><div class="v ${bAov(t.aov)}">${fGBP(t.aov)}</div><div class="s">Target above £12.50</div></div>
+      <div class="tile"><div class="k">Drop rate</div><div class="v ${bDrop(t.drops)}">${t.drops == null ? '–' : t.drops.toFixed(2)}</div><div class="s">Drops per sale, target 2.5+</div></div>`;
     const tots = P.map(x => ({ key: x.key, label: x.short, full: x.label, t: sum(x.weeks.map(we => byWe[we])) }));
-    chart($q('c1'), tots.map(x => ({ ...x, y: x.t.doors })), fInt);
-    chart($q('c2'), tots.map(x => ({ ...x, y: x.t.per100 })), v => v.toFixed(1));
+    chart($q('c1'), tots.map(x => ({ ...x, y: x.t.sales })), fInt);
+    chart($q('c2'), tots.map(x => ({ ...x, y: x.t.mpct, c: bMem(x.t.mpct) })), v => Math.round(v) + '%');
     $q('ttitle').textContent = `Your team · ${p.label}`;
     table(p);
   }
@@ -618,7 +622,7 @@ function doorsView(el, D) {
     for (let g = 0; g <= top + 1e-9; g += nice) s += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${fmt(g)}</text>`;
     vals.forEach((v, i) => {
       const cx = L + i * bw + bw / 2, x = cx - bwd / 2, bh = v.y ? y(0) - y(v.y) : 0, r = Math.min(4, bh / 2), lastL = i === vals.length - 1;
-      if (bh > 0) s += `<path class="bar${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
+      if (bh > 0) s += `<path class="bar${v.c ? ' ' + v.c : ''}${v.key === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>`;
       if ((i % k === 0 && vals.length - 1 - i >= k) || lastL) s += `<text class="axis" x="${lastL && k > 1 ? w - R : cx}" y="${h - 6}" text-anchor="${lastL && k > 1 ? 'end' : 'middle'}">${esc(v.label)}</text>`;
       s += `<rect class="hit" x="${L + i * bw}" y="${T}" width="${bw}" height="${h - T - B}" data-i="${i}"><title>${esc(v.full)}: ${v.y == null ? '–' : fmt(v.y)}</title></rect>`;
     });
@@ -627,25 +631,25 @@ function doorsView(el, D) {
   }
   function table(p) {
     const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: [m.sub, m.stage].filter(Boolean).join(' · '), ...sum(p.weeks.map(we => (m.mmp || {})[we])) }))
-      .filter(r => r.doors > 0 || r.sales > 0).map(r => ({ ...r, per100: r.doors >= 50 ? r.per100 : null }));   // a handful of doors makes the rate meaningless
+      .filter(r => r.sales > 0);
     const others = D.members.length - rows.length;
     rows.sort((a, b) => sortKey === 'name' ? sortDir * a.name.localeCompare(b.name) : (sortDir * ((a[sortKey] ?? -1) - (b[sortKey] ?? -1)) || a.name.localeCompare(b.name)));
-    const cols = [{ k: 'name', t: 'Name' }, { k: 'doors', t: 'Doors knocked', n: 1 }, { k: 'sales', t: 'Sales', n: 1 }, { k: 'per100', t: 'Per 100 doors', n: 1 },
-      { k: 'mpct', t: 'Membership %', n: 1 }, { k: 'aov', t: 'Avg order', n: 1 }, { k: 'drops', t: 'Drops', n: 1 }];
+    const cols = [{ k: 'name', t: 'Name' }, { k: 'sales', t: 'Sales', n: 1 },
+      { k: 'mpct', t: 'Membership %', n: 1 }, { k: 'aov', t: 'Avg order', n: 1 }, { k: 'drops', t: 'Drop rate', n: 1 }];
     const tb = el.querySelector('.qtbl');
     tb.tHead.innerHTML = '<tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
     tb.tBodies[0].innerHTML = rows.length ? rows.map(r => `<tr><td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc(r.sub)}</small></div></td>
-      <td class="n">${fInt(r.doors)}</td><td class="n">${fInt(r.sales)}</td><td class="n">${r.per100 == null ? '–' : r.per100.toFixed(2)}</td>
-      <td class="n">${fPct(r.mpct)}</td><td class="n">${fGBP(r.aov)}</td><td class="n">${r.drops == null ? '–' : r.drops.toFixed(1)}</td></tr>`).join('')
-      : `<tr><td colspan="7" class="dim">Nobody in this team worked Modern Milkman in ${esc(p.label)}.</td></tr>`;
+      <td class="n">${fInt(r.sales)}</td>
+      <td class="n">${pill(bMem(r.mpct), fPct(r.mpct))}</td><td class="n">${pill(bAov(r.aov), fGBP(r.aov))}</td><td class="n">${pill(bDrop(r.drops), r.drops == null ? '–' : r.drops.toFixed(2))}</td></tr>`).join('')
+      : `<tr><td colspan="5" class="dim">Nobody in this team worked Modern Milkman in ${esc(p.label)}.</td></tr>`;
     tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => { if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = sortKey === 'name' ? 1 : -1; } table(p); });
     $q('tnote').textContent = others ? `${others} other ${others === 1 ? 'person has' : 'people have'} no Modern Milkman report in this ${mode}.` : '';
   }
   setup();
 }
-// Page tabs: "Sales & earnings", "Quality" and "Doors knocked"; a tab only shows when the team has its data.
+// Page tabs: "Sales & earnings", "Quality" and "Milkman"; a tab only shows when the team has its data.
 function pageTabs(root, D) {
-  const bar = root.querySelector('.pagetabs'), has = a => (a || []).some(x => x.first > 0 || x.doors > 0 || x.sales > 0);
+  const bar = root.querySelector('.pagetabs'), has = a => (a || []).some(x => x.first > 0 || x.sales > 0);
   const views = { main: () => {}, quality: el => qualityView(el, D), doors: el => doorsView(el, D) };
   const ok = { main: true, quality: has(D.q4) || has(D.hf2), doors: has(D.mmp) };
   const tabs = Object.keys(views).filter(t => ok[t]);

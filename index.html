@@ -325,7 +325,7 @@ function order(list) {  // parents first, each followed by its sub-teams
   const visible = new Set(list.map(t => t.slug));
   const roots = list.filter(t => !t.parent || !visible.has(t.parent));
   const out = []; const walk = t => { out.push(t); (kids[t.slug] || []).sort((a, b) => a.name.localeCompare(b.name)).forEach(walk); };
-  roots.sort((a, b) => a.name.localeCompare(b.name)).forEach(walk);
+  roots.sort((a, b) => (b.slug === 'all-ybm') - (a.slug === 'all-ybm') || a.name.localeCompare(b.name)).forEach(walk);  // owner's All of YBM page first
   return out;
 }
 $('#teamPick').onchange = e => openTeam(e.target.value);

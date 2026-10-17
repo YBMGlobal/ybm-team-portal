@@ -139,6 +139,27 @@ table.qtbl { min-width: 520px; }
 .key i.good { background: var(--good-solid); } .key i.warn { background: var(--warn-solid); } .key i.bad { background: var(--bad-solid); }
 .key b { font-weight: 600; color: var(--ink); }
 @media (prefers-reduced-motion: no-preference) { .chart .bar { transition: opacity .15s; } }
+/* Client themes, from each client's logo: HelloFresh lime and charcoal, Modern Milkman bottle blue and black */
+.brand-hf { --accent: #6fa80c; --accent-soft: #eef8dc; --brand: #96da13; --brand-ink: #242424; --brand-bg: #f3fbe6; }
+.brand-mm { --accent: #3f8f9c; --accent-soft: #e6f3f5; --brand: #b6dde2; --brand-ink: #111313; --brand-bg: #eef7f8; }
+@media (prefers-color-scheme: dark) {
+  .brand-hf { --accent: #96da13; --accent-soft: #24331a; --brand-bg: #1b2414; --brand-ink: #e9eceb; }
+  .brand-mm { --accent: #8cc8d2; --accent-soft: #1b2c30; --brand-bg: #152225; --brand-ink: #e9eceb; } }
+.portalpick { gap: 4px; }
+.portalpick button { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid transparent; }
+.portalpick img { height: 34px; width: auto; display: block; background: #fff; border-radius: 5px; padding: 2px 4px; }
+.portalpick button[aria-pressed=true] { background: var(--brand-bg); border-color: var(--brand); box-shadow: inset 0 -3px 0 var(--brand); }
+body.brand-hf .bar, body.brand-mm .bar { box-shadow: inset 0 -4px 0 var(--brand); }
+.portal-name { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--brand-ink); font-weight: 600; }
+.brand-band { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 18px; border-radius: 12px; background: var(--brand-bg); border: 1px solid var(--line); box-shadow: inset 6px 0 0 var(--brand); }
+.brand-band img { height: 52px; width: auto; background: #fff; border-radius: 8px; padding: 4px 8px; display: block; }
+.brand-band h2 { color: var(--brand-ink); }
+.brand-band .note { margin-top: 2px; }
+.brand-band .qctl { margin-left: auto; }
+.chart .bar.ghost { fill: var(--muted); opacity: .3; }
+.daytbl { min-width: 720px; }
+.daytbl td.today, .daytbl th.today { background: var(--accent-soft); }
+.tag { font-size: 11px; color: var(--muted); margin-left: 6px; letter-spacing: .04em; text-transform: uppercase; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
@@ -148,6 +169,10 @@ table.qtbl { min-width: 520px; }
 <div class="bar gutter" id="bar" hidden>
   <div class="bar-in">
     <div class="mark">YBM <small>Team Portal</small></div>
+    <div class="seg portalpick" role="group" aria-label="Client portal" id="portalPick" hidden>
+      <button type="button" data-p="hf" title="HelloFresh portal"><img src="logos/hellofresh.png" alt="HelloFresh"></button>
+      <button type="button" data-p="mm" title="Modern Milkman portal"><img src="logos/modern-milkman.png" alt="Modern Milkman"></button>
+    </div>
     <label class="who-am-i" for="teamPick" id="teamPickWrap" hidden>Team <select id="teamPick"></select></label>
     <button class="btn" id="adminBtn" hidden>Manage access</button>
     <span class="who-am-i" id="meEmail"></span>
@@ -291,7 +316,7 @@ sb.auth.onAuthStateChange(ev => {
 });
 
 // ---------- Session start ----------
-let me = null, teams = [], isAdmin = false;
+let me = null, teams = [], allTeams = [], isAdmin = false, home = null, portal = null;
 async function boot() {
   const { data } = await sb.auth.getSession();
   if (!data.session) { setMode('in'); show('authView'); return; }
@@ -304,20 +329,39 @@ async function start() {
   $('#meEmail').textContent = me;
   const [{ data: acc }, { data: list, error }] = await Promise.all([
     sb.from('access').select('*').eq('email', me).maybeSingle(),
-    sb.from('teams').select('slug,name,parent,ancestors,leader,updated_at'),
+    sb.from('teams').select('slug,name,parent,ancestors,leader,updated_at,clients:data->clients'),
   ]);
   if (error) { show('pendingView'); $('#pendingEmail').textContent = me; return; }
   isAdmin = !!(acc && acc.is_admin);
-  teams = order(list || []);
+  allTeams = order(list || []);
   $('#adminBtn').hidden = !isAdmin;
-  if (!teams.length) { show('pendingView'); $('#pendingEmail').textContent = me; $('#bar').hidden = false; return; }
-  const pick = $('#teamPick');
-  pick.innerHTML = teams.map(t => `<option value="${esc(t.slug)}">${' '.repeat(t.ancestors.length)}${esc(t.name)}</option>`).join('');
-  $('#teamPickWrap').hidden = teams.length < 2;
-  const want = location.hash.slice(1);
-  const home = (acc && acc.team_slug && teams.some(t => t.slug === acc.team_slug)) ? acc.team_slug : teams[0].slug;
-  openTeam(teams.some(t => t.slug === want) ? want : home);
+  if (!allTeams.length) { show('pendingView'); $('#pendingEmail').textContent = me; $('#bar').hidden = false; return; }
+  // Two separate portals, HelloFresh and Modern Milkman: each lists only the teams, BAs and numbers for that client.
+  const [wantP, wantT] = parseHash();
+  home = (acc && acc.team_slug && allTeams.some(t => t.slug === acc.team_slug)) ? acc.team_slug : allTeams[0].slug;
+  const homeT = allTeams.find(t => t.slug === (wantT || home)), canUse = p => allTeams.some(t => inPortal(t, p));
+  let p = ['hf', 'mm'].includes(wantP) ? wantP : null;
+  if (!p) { try { p = localStorage.getItem('ybm-portal'); } catch (e) {} }
+  if (!['hf', 'mm'].includes(p) || !canUse(p)) p = (homeT && (homeT.clients || [])[0]) || (canUse('hf') ? 'hf' : 'mm');
+  $('#portalPick').hidden = !(canUse('hf') && canUse('mm'));
+  setPortal(p, wantT);
 }
+const inPortal = (t, p) => !t.clients || !t.clients.length || t.clients.includes(p);
+function parseHash() { const h = location.hash.slice(1).split('/'); return h.length > 1 ? h : [null, h[0]]; }
+function setPortal(p, slug) {
+  portal = p; try { localStorage.setItem('ybm-portal', p); } catch (e) {}
+  document.body.classList.remove('brand-hf', 'brand-mm'); document.body.classList.add('brand-' + p);
+  $('#portalPick').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.p === p));
+  teams = allTeams.filter(t => inPortal(t, p));
+  const pick = $('#teamPick');
+  pick.innerHTML = teams.map(t => `<option value="${esc(t.slug)}">${' '.repeat(t.ancestors.length)}${esc(t.name)}</option>`).join('');
+  $('#teamPickWrap').hidden = teams.length < 2;
+  // Stay on the same team when it works for this client too; otherwise go to the leader's own team, else the first one.
+  const ok = x => x && teams.some(t => t.slug === x);
+  const mine = teams.find(t => t.slug === home || t.ancestors.includes(home));
+  openTeam(ok(slug) ? slug : mine ? mine.slug : teams[0].slug);
+}
+$('#portalPick').querySelectorAll('button').forEach(b => b.onclick = () => setPortal(b.dataset.p, $('#teamPick').value));
 function order(list) {  // parents first, each followed by its sub-teams
   const kids = {}; list.forEach(t => (kids[t.parent || ''] ||= []).push(t));
   const visible = new Set(list.map(t => t.slug));
@@ -329,30 +373,50 @@ function order(list) {  // parents first, each followed by its sub-teams
 $('#teamPick').onchange = e => openTeam(e.target.value);
 async function openTeam(slug) {
   $('#teamPick').value = slug;
-  if (location.hash.slice(1) !== slug) history.replaceState(null, '', '#' + slug);
+  if (location.hash.slice(1) !== portal + '/' + slug) history.replaceState(null, '', '#' + portal + '/' + slug);
   const { data, error } = await sb.from('teams').select('data').eq('slug', slug).maybeSingle();
   if (error || !data) { show('pendingView'); return; }
   show('dashView');
-  renderTeam(data.data);
+  renderTeam(forClient(data.data, portal));
+}
+// One client's slice of a team: its weeks, its BAs and its own reports only, so HelloFresh and Milkman numbers never mix.
+const CLIENT = { hf: 'HelloFresh / Green Chef', mm: 'Modern Milkman' };
+function forClient(D, c) {
+  const some = o => Object.values(o || {}).some(x => x && Object.values(x).some(Boolean));
+  const dailyIds = new Set(((D.daily || {}).people || []).filter(p => p.client === c && p.id).map(p => p.id));
+  const noData = m => !some(m.earn) && !some(m.q4) && !some(m.mmp) && !some(m.hf2) && !((D.daily || {}).people || []).some(p => p.id === m.id);
+  const uses = m => dailyIds.has(m.id) || Object.values(m.earn || {}).some(x => x[c] || x[c + 'Fails'] || x[c + 'Pay'])
+    || (c === 'mm' ? some(m.q4) || some(m.mmp) : some(m.hf2))
+    || (noData(m) && (D.clients || []).length === 1 && D.clients[0] === c);
+  const members = D.members.filter(uses).map(m => ({ ...m,
+    earn: Object.fromEntries(Object.entries(m.earn || {}).filter(([, x]) => x[c] || x[c + 'Fails'] || x[c + 'Pay'])
+      .map(([we, x]) => [we, { sales: x[c] || 0, fails: x[c + 'Fails'] || 0, pay: x[c + 'Pay'] || 0 }])),
+    q4: c === 'mm' ? m.q4 : {}, mmp: c === 'mm' ? m.mmp : {}, hf2: c === 'hf' ? m.hf2 : {} }));
+  const split = (D.weeks[0] || {})[c + 'Pay'] !== undefined;   // older uploads only split sales by client
+  return { ...D, client: c, members, subteams: [...new Set(members.map(m => m.sub).filter(Boolean))].sort(),
+    weeks: D.weeks.map(w => ({ we: w.we, sales: w[c] || 0, fails: split ? w[c + 'Fails'] : null, pay: split ? w[c + 'Pay'] : null, active: split ? w[c + 'Active'] : null })),
+    q4: c === 'mm' ? D.q4 : [], mmp: c === 'mm' ? D.mmp : [], hf2: c === 'hf' ? D.hf2 : [],
+    daily: D.daily && { ...D.daily, people: D.daily.people.filter(p => p.client === c) } };
 }
 
 // ---------- Dashboard ----------
 function renderTeam(D) {
   const root = $('#dashView');
   const kids = teams.filter(t => t.parent === D.slug);
+  const cName = CLIENT[D.client];
   root.innerHTML = `<div class="wrap">
   <div class="head"><div>
-      <div class="eyebrow">YBM Global · Team stats</div>
+      <div class="eyebrow">YBM Global · <span class="portal-name">${esc(cName)}</span></div>
       <h1>${esc(D.team)}</h1>
       <div class="meta" data-r="meta"></div>
     </div><div class="updated" data-r="updated"></div></div>
   ${kids.length ? `<div class="subnav"><span class="note">Sub-teams:</span>${kids.map(k => `<button data-team="${esc(k.slug)}">${esc(k.name)}</button>`).join('')}</div>` : ''}
-  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Quality</button><button role="tab" data-tab="doors">Milkman stats</button></div>
+  <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="daily">Daily sales</button><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Quality</button><button role="tab" data-tab="doors">Milkman stats</button></div>
   <div class="view" data-view="main">
   <section class="section"><div class="sec-head"><h2>Earnings and fails</h2>
       <label class="note">Week ending <select data-r="week" id="weekPick"></select></label></div>
     <div class="tiles" data-r="earnTiles"></div>
-    <p class="note">From the Modern Milkman and HelloFresh / Green Chef earnings sheets. Paid sales exclude fails. Fail rate is fails ÷ (paid sales + fails).</p></section>
+    <p class="note">From the ${esc(cName)} earnings sheets. Paid sales exclude fails. Fail rate is fails ÷ (paid sales + fails).</p></section>
   <section class="section"><h2>Week by week</h2><div class="charts">
       <div class="chart"><h3>Paid sales</h3><div data-r="cSales"></div></div>
       <div class="chart"><h3>Team earnings (£)</h3><div data-r="cPay"></div></div>
@@ -360,6 +424,7 @@ function renderTeam(D) {
   <section class="section"><div class="sec-head"><h2>Your team</h2><p class="note">A dash means no sales or pay that week. Avg / week counts only weeks they worked.</p></div>
     <div class="tablebox"><table class="members"><thead></thead><tbody></tbody></table></div></section>
   </div>
+  <div class="view" data-view="daily" hidden></div>
   <div class="view" data-view="quality" hidden></div>
   <div class="view" data-view="doors" hidden></div>
   <footer><div>Team members are the people on YBM's team list for this team, including its sub-teams. Earlier weeks count only people who are in the team now.</div>
@@ -395,7 +460,7 @@ function renderTeam(D) {
     const avg = w.active ? w.pay / w.active : null;
     const cmp = (a, b) => b == null ? '' : `<span class="${a >= b ? 'up' : 'down'}">${a >= b ? '▲' : '▼'} ${fmtGBP(Math.abs(a - b))}</span> vs previous week`;
     R('earnTiles').innerHTML = `
-      <div class="tile"><div class="k">Paid sales</div><div class="v">${fmtInt(w.sales)}</div><div class="s">MM ${fmtInt(w.mm)} · HF/GC ${fmtInt(w.hf)}</div></div>
+      <div class="tile"><div class="k">Paid sales</div><div class="v">${fmtInt(w.sales)}</div><div class="s">${esc(cName)}</div></div>
       <div class="tile"><div class="k">Team earnings</div><div class="v">${fmtGBP(w.pay)}</div><div class="s">${p ? cmp(w.pay, p.pay) : ''}</div></div>
       <div class="tile"><div class="k">Average per BA</div><div class="v">${fmtGBP(avg)}</div><div class="s">${w.active} BAs with a paid sale</div></div>
       <div class="tile"><div class="k">Fail rate</div><div class="v">${fmtPct(pct(w.fails, w.sales))}</div><div class="s">${fmtInt(w.fails)} fails · 4-week ${fmtPct(pct(ff, fs))}</div></div>`;
@@ -472,6 +537,105 @@ function renderTeam(D) {
   draw();
 }
 
+// ---- Daily sales page: each BA's sales per day, from YBM's own daily sales sheets (one per client), refreshed every morning
+const LOGO = { hf: 'logos/hellofresh.png', mm: 'logos/modern-milkman.png' };
+function dailyView(el, D) {
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fInt = n => n == null ? '–' : Math.round(n).toLocaleString('en-GB');
+  const day = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} };
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const NAME = { hf: 'HelloFresh', mm: 'Modern Milkman' };
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
+  const X = D.daily, W = X.weeks;
+  const have = ['hf', 'mm'].filter(c => X.people.some(p => p.client === c));
+  if (!have.length) return;
+  let client = have.includes(ls('ybm-s-client')) ? ls('ybm-s-client') : have[0], sel, sortKey = 'total', sortDir = -1;
+  el.innerHTML = `<section class="section">
+    <div class="brand-band"><img data-q="logo" alt=""><div><h2>Daily sales</h2><p class="note" data-q="upd"></p></div>
+      <div class="qctl">${have.length > 1 ? `<div class="seg" role="group" aria-label="Client">${have.map(c => `<button data-c="${c}">${NAME[c]}</button>`).join('')}</div>` : ''}
+      <select aria-label="Week"></select></div></div>
+    <div class="tiles" data-q="tiles"></div></section>
+  <div class="charts"><div class="chart"><h3 data-q="c1t"></h3><div data-q="c1"></div></div><div class="chart"><h3>Sales by week</h3><div data-q="c2"></div></div></div>
+  <section class="section"><div class="sec-head"><h2 data-q="ttitle"></h2><p class="note">A number is a day out selling (0 = out, no sales). A dash is a day not out.</p></div>
+    <div class="tablebox"><table class="daytbl"><thead></thead><tbody></tbody></table></div></section>`;
+  const $q = n => el.querySelector(`[data-q="${n}"]`), selEl = el.querySelector('select');
+  $q('upd').textContent = 'From the YBM daily sales sheet · updated ' + new Date(X.updated).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+  el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { client = b.dataset.c; ls('ybm-s-client', client); setup(); });
+  selEl.onchange = () => { sel = selEl.value; draw(); };
+  // Index of today's column in a week (0 = Monday), or 7 when the whole week is past.
+  const upTo = w => today < w.ws ? 0 : today > w.we ? 7 : Math.round((new Date(today) - new Date(w.ws)) / 864e5) + 1;
+  function setup() {
+    el.className = 'view brand-' + client; $q('logo').src = LOGO[client]; $q('logo').alt = NAME[client];
+    el.querySelectorAll('[data-c]').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === client));
+    const weeks = W.filter(w => w[client].baDays || w[client].sales);
+    selEl.innerHTML = ''; weeks.slice().reverse().forEach(w => selEl.add(new Option((w.current ? 'This week · ' : '') + 'w/e ' + day(w.we), w.we)));
+    sel = weeks.length ? weeks[weeks.length - 1].we : W[W.length - 1].we; selEl.value = sel;
+    draw();
+  }
+  function draw() {
+    const i = W.findIndex(w => w.we === sel), w = W[i][client], p = i > 0 ? W[i - 1][client] : null, n = upTo(W[i]);
+    const sumTo = (x, k) => x ? x.days.slice(0, k).reduce((a, v) => a + (v || 0), 0) : null;
+    const ti = n >= 1 && n <= 7 ? n - 1 : null, todayV = ti != null ? w.days[ti] : null;
+    const yi = ti != null && ti > 0 ? ti - 1 : null;
+    const cmp = (a, b, what) => a == null || b == null ? '' : `<span class="${a >= b ? 'up' : 'down'}">${a >= b ? '▲' : '▼'} ${fInt(Math.abs(a - b))}</span> vs ${what}`;
+    const soFar = W[i].current ? sumTo(w, n) : w.sales, lastSame = W[i].current && p ? sumTo(p, n) : p && p.sales;
+    $q('tiles').innerHTML = [
+      W[i].current && `<div class="tile live"><div class="k">Today · ${DAYS[ti]}</div><div class="v">${todayV == null ? '–' : fInt(todayV)}</div><div class="s">${yi != null ? `${DAYS[yi]}: ${fInt(w.days[yi])}` : 'Filled in as the day goes'}</div></div>`,
+      `<div class="tile${W[i].current ? '' : ' live'}"><div class="k">${W[i].current ? 'This week so far' : 'Week total'}</div><div class="v">${fInt(soFar)}</div><div class="s">${cmp(soFar, lastSame, W[i].current ? 'same point last week' : 'the week before') || 'w/e ' + day(W[i].we)}</div></div>`,
+      `<div class="tile"><div class="k">BAs out</div><div class="v">${fInt(w.people)}</div><div class="s">${fInt(w.baDays)} BA-days</div></div>`,
+      `<div class="tile"><div class="k">Sales per BA-day</div><div class="v">${w.baDays ? (w.sales / w.baDays).toFixed(1) : '–'}</div><div class="s">${p && p.baDays ? 'Week before ' + (p.sales / p.baDays).toFixed(1) : ''}</div></div>`,
+    ].filter(Boolean).join('');
+    $q('c1t').textContent = `Sales by day · w/e ${day(W[i].we)}` + (p ? ' (grey: the week before)' : '');
+    dayChart($q('c1'), w, p);
+    weekChart($q('c2'), W.map(x => ({ we: x.we, y: x[client].sales, cur: x.current })));
+    $q('ttitle').textContent = `Your team · ${NAME[client]} · w/e ${day(W[i].we)}`;
+    table(i, n);
+  }
+  function axis(top) { const step = Math.pow(10, Math.floor(Math.log10(Math.max(1, top)))); const nice = [1, 2, 2.5, 5, 10].map(m => m * step).find(m => top / m <= 4) || step * 10; return [nice, Math.ceil(Math.max(1, top) / nice) * nice]; }
+  function dayChart(box, w, p) {
+    const W2 = 480, h = 190, L = 34, R = 6, T = 14, B = 22, [nice, top] = axis(Math.max(...w.days.map(v => v || 0), ...(p ? p.days.map(v => v || 0) : [0])));
+    const y = v => T + (h - T - B) * (1 - v / top), bw = (W2 - L - R) / 7, bar = (x, v, cls, wd) => { const bh = y(0) - y(v), r = Math.min(3, bh / 2); return bh > 0 ? `<path class="bar ${cls}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${wd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/>` : ''; };
+    let s = `<svg viewBox="0 0 ${W2} ${h}" role="img" aria-label="Sales by day">`;
+    for (let g = 0; g <= top + 1e-9; g += nice) s += `<line class="grid" x1="${L}" x2="${W2 - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${fInt(g)}</text>`;
+    DAYS.forEach((d, k) => {
+      const x = L + k * bw, wd = Math.min(26, (bw - 10) / 2);
+      if (p && p.days[k]) s += bar(x + bw / 2 - wd - 1, p.days[k], 'ghost', wd);
+      if (w.days[k]) s += bar(x + bw / 2 + 1, w.days[k], 'sel', wd) + `<text class="axis val" x="${x + bw / 2 + 1 + wd / 2}" y="${y(w.days[k]) - 4}" text-anchor="middle">${w.days[k]}</text>`;
+      s += `<text class="axis" x="${x + bw / 2}" y="${h - 6}" text-anchor="middle">${d}</text>`;
+      s += `<rect class="hit" x="${x}" y="${T}" width="${bw}" height="${h - T - B}"><title>${d}: ${fInt(w.days[k])}${p ? ' · week before ' + fInt(p.days[k]) : ''}</title></rect>`;
+    });
+    box.innerHTML = s + '</svg>';
+  }
+  function weekChart(box, vals) {
+    const W2 = 480, h = 190, L = 40, R = 6, T = 14, B = 22, [nice, top] = axis(Math.max(...vals.map(v => v.y || 0)));
+    const y = v => T + (h - T - B) * (1 - v / top), bw = (W2 - L - R) / vals.length, bwd = Math.min(bw - 6, 48);
+    let s = `<svg viewBox="0 0 ${W2} ${h}" role="img" aria-label="Sales by week">`;
+    for (let g = 0; g <= top + 1e-9; g += nice) s += `<line class="grid" x1="${L}" x2="${W2 - R}" y1="${y(g)}" y2="${y(g)}"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${fInt(g)}</text>`;
+    vals.forEach((v, i) => {
+      const cx = L + i * bw + bw / 2, x = cx - bwd / 2, bh = v.y ? y(0) - y(v.y) : 0, r = Math.min(4, bh / 2);
+      if (bh > 0) s += `<path class="bar${v.we === sel ? ' sel' : ''}" d="M${x},${y(0)} v${-(bh - r)} q0,${-r} ${r},${-r} h${bwd - 2 * r} q${r},0 ${r},${r} v${bh - r} z"/><text class="axis val" x="${cx}" y="${y(v.y) - 4}" text-anchor="middle">${fInt(v.y)}</text>`;
+      if (i % 2 === (vals.length - 1) % 2) s += `<text class="axis${v.we === sel ? ' on' : ''}" x="${cx}" y="${h - 6}" text-anchor="middle">${v.cur ? 'Now' : day(v.we)}</text>`;
+      s += `<rect class="hit" x="${L + i * bw}" y="${T}" width="${bw}" height="${h - T - B}" data-we="${v.we}"><title>w/e ${day(v.we)}: ${fInt(v.y)}</title></rect>`;
+    });
+    box.innerHTML = s + '</svg>';
+    box.querySelectorAll('.hit').forEach(r => r.onclick = () => { if ([...selEl.options].some(o => o.value === r.dataset.we)) { sel = selEl.value = r.dataset.we; draw(); } });
+  }
+  function table(i, n) {
+    const we = W[i].we, ti = W[i].current ? n - 1 : -1;
+    const rows = X.people.filter(p => p.client === client && p.w[we]).map(p => ({ ...p, d: p.w[we].d, total: p.w[we].s, out: p.w[we].n, per: p.w[we].n ? p.w[we].s / p.w[we].n : null }));
+    rows.sort((a, b) => sortKey === 'name' ? sortDir * a.name.localeCompare(b.name) : (sortDir * ((a[sortKey] ?? -1) - (b[sortKey] ?? -1)) || a.name.localeCompare(b.name)));
+    const cols = [{ k: 'name', t: 'Name' }, ...DAYS.map((d, k) => ({ t: d, n: 1, day: k })), { k: 'total', t: 'Total', n: 1, g: 1 }, { k: 'out', t: 'Days out', n: 1 }, { k: 'per', t: 'Per day', n: 1 }];
+    const tb = el.querySelector('.daytbl'), dash = '<span class="dim">–</span>';
+    tb.tHead.innerHTML = '<tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}${c.g ? ' grp' : ''}${c.day === ti ? ' today' : ''}">${c.k ? `<button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button>` : c.t}</th>`).join('') + '</tr>';
+    tb.tBodies[0].innerHTML = rows.length ? rows.map(r => `<tr><td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}${r.new ? '<span class="tag">New</span>' : ''}</span><small>${esc(r.sub || '')}</small></div></td>
+      ${r.d.map((v, k) => `<td class="n${k === ti ? ' today' : ''}">${v == null ? dash : fInt(v)}</td>`).join('')}
+      <td class="n grp"><b>${fInt(r.total)}</b></td><td class="n">${fInt(r.out)}</td><td class="n">${r.per == null ? dash : r.per.toFixed(1)}</td></tr>`).join('')
+      : `<tr><td colspan="11" class="dim">Nobody in this team is on the ${NAME[client]} sheet for this week.</td></tr>`;
+    tb.tHead.querySelectorAll('button').forEach(b => b.onclick = () => { if (sortKey === b.dataset.k) sortDir = -sortDir; else { sortKey = b.dataset.k; sortDir = sortKey === 'name' ? 1 : -1; } table(i, n); });
+  }
+  setup();
+}
 // ---- Delivery quality page: Modern Milkman 4th-delivery and HelloFresh 2nd-box exports, by week or by month
 function qualityView(el, D) {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -500,7 +664,7 @@ function qualityView(el, D) {
   };
   let mode = ls('ybm-q-mode') === 'month' ? 'month' : 'week', P, sel, sortKey = 'rate', sortDir = -1;
   el.innerHTML = `<section class="section">
-    <div class="sec-head"><h2>Customer quality</h2>
+    <div class="brand-band"><img data-q="logo" alt=""><div><h2>Customer quality</h2></div>
       <div class="qctl">${have.length > 1 ? `<div class="seg" role="group" aria-label="Client">${have.map(k => `<button data-c="${k}">${SRC[k].name}</button>`).join('')}</div>` : ''}<div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
       <select aria-label="Period"></select></div></div>
     <div class="key" data-q="key"></div>
@@ -515,6 +679,7 @@ function qualityView(el, D) {
   selEl.onchange = () => { sel = selEl.value; draw(); };
   function setup() {
     S = SRC[client]; Q = S.rows.filter(q => q.first > 0); teamQ = Object.fromEntries(Q.map(q => [q.we, q]));
+    el.className = 'view brand-' + client; $q('logo').src = LOGO[client]; $q('logo').alt = S.name;
     P = periods(mode); sel = P[P.length - 1].key;
     el.querySelectorAll('[data-m]').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === mode));
     el.querySelectorAll('[data-c]').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === client));
@@ -594,8 +759,9 @@ function doorsView(el, D) {
     return Object.keys(g).sort().map(k => ({ key: k, label: mon(k), short: mon(k, 1), weeks: g[k] }));
   };
   let mode = ls('ybm-d-mode') === 'month' ? 'month' : 'week', P, sel, sortKey = 'sales', sortDir = -1;
+  el.classList.add('brand-mm');
   el.innerHTML = `<section class="section">
-    <div class="sec-head"><h2>Modern Milkman weekly stats</h2>
+    <div class="brand-band"><img src="logos/modern-milkman.png" alt="Modern Milkman"><div><h2>Modern Milkman weekly stats</h2></div>
       <div class="qctl"><div class="seg" role="group" aria-label="Show by"><button data-m="week">Weekly</button><button data-m="month">Monthly</button></div>
       <select aria-label="Period"></select></div></div>
     <div class="key"><b>Targets:</b><span>Membership above 75%</span><span>Average order above £12.50</span><span>Drop rate 2.5+</span><span><i class="good"></i>On target</span><span><i class="warn"></i>Close</span><span><i class="bad"></i>Below</span></div>
@@ -663,18 +829,18 @@ function doorsView(el, D) {
   }
   setup();
 }
-// Page tabs: "Sales & earnings", "Quality" and "Milkman"; a tab only shows when the team has its data.
+// Page tabs: "Daily sales", "Sales & earnings", "Quality" and "Milkman"; a tab only shows when the team has its data.
 function pageTabs(root, D) {
   const bar = root.querySelector('.pagetabs'), has = a => (a || []).some(x => x.first > 0 || x.sales > 0);
-  const views = { main: () => {}, quality: el => qualityView(el, D), doors: el => doorsView(el, D) };
-  const ok = { main: true, quality: has(D.q4) || has(D.hf2), doors: has(D.mmp) };
+  const views = { daily: el => dailyView(el, D), main: () => {}, quality: el => qualityView(el, D), doors: el => doorsView(el, D) };
+  const ok = { daily: !!(D.daily && D.daily.people.length), main: true, quality: has(D.q4) || has(D.hf2), doors: has(D.mmp) };
   const tabs = Object.keys(views).filter(t => ok[t]);
   bar.querySelectorAll('button').forEach(b => b.hidden = !ok[b.dataset.tab]);
   Object.keys(views).forEach(t => { const v = root.querySelector(`[data-view="${t}"]`); v.hidden = t !== 'main'; if (ok[t] && t !== 'main') views[t](v); });
   if (tabs.length < 2) { bar.hidden = true; return; }
   const show = t => { bar.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); tabs.forEach(x => root.querySelector(`[data-view="${x}"]`).hidden = x !== t); try { localStorage.setItem('ybm-tab', t); } catch (e) {} };
   bar.querySelectorAll('button').forEach(b => b.onclick = () => show(b.dataset.tab));
-  let t = 'main'; try { const s = localStorage.getItem('ybm-tab'); if (tabs.includes(s)) t = s; } catch (e) {}
+  let t = tabs[0]; try { const s = localStorage.getItem('ybm-tab'); if (tabs.includes(s)) t = s; } catch (e) {}
   show(t);
 }
 

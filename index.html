@@ -65,8 +65,6 @@ h2 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: va
 .tile .k { font-size: 12.5px; color: var(--ink-2); }
 .tile .v { font-family: var(--mono); font-size: 30px; font-weight: 500; letter-spacing: -.01em; }
 .tile .s { font-size: 12.5px; color: var(--muted); }
-.tile.live { background: var(--accent-soft); }
-.tile.live .k::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
 .up { color: var(--good); } .down { color: var(--bad); }
 .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
 .pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
@@ -351,8 +349,6 @@ function renderTeam(D) {
   ${kids.length ? `<div class="subnav"><span class="note">Sub-teams:</span>${kids.map(k => `<button data-team="${esc(k.slug)}">${esc(k.name)}</button>`).join('')}</div>` : ''}
   <div class="seg pagetabs" role="tablist" aria-label="Page"><button role="tab" data-tab="main">Sales &amp; earnings</button><button role="tab" data-tab="quality">Quality</button><button role="tab" data-tab="doors">Milkman stats</button></div>
   <div class="view" data-view="main">
-  <section class="section"><div class="sec-head"><h2>Sales logged in Owner IQ</h2><p class="note">Live, refreshed every morning</p></div>
-    <div class="tiles" data-r="liveTiles"></div></section>
   <section class="section"><div class="sec-head"><h2>Earnings and fails</h2>
       <label class="note">Week ending <select data-r="week" id="weekPick"></select></label></div>
     <div class="tiles" data-r="earnTiles"></div>
@@ -366,7 +362,7 @@ function renderTeam(D) {
   </div>
   <div class="view" data-view="quality" hidden></div>
   <div class="view" data-view="doors" hidden></div>
-  <footer><div>Team members are the people in this team's spider on Owner IQ today, including its sub-teams. Earlier weeks count only people who are in the team now.</div>
+  <footer><div>Team members are the people on YBM's team list for this team, including its sub-teams. Earlier weeks count only people who are in the team now.</div>
     <div>These numbers are private to YBM. Please don't share screenshots outside your team.</div></footer></div>`;
   root.querySelectorAll('[data-team]').forEach(b => b.onclick = () => openTeam(b.dataset.team));
   const R = n => root.querySelector(`[data-r="${n}"]`);
@@ -382,16 +378,6 @@ function renderTeam(D) {
   const parentName = D.parent;
   R('meta').textContent = (parentName ? `Part of ${parentName} · ` : '') + `Led by ${D.leader} · ${D.members.length} people` + (D.subteams.length ? ` · includes ${D.subteams.join(', ')}` : '');
   R('updated').textContent = 'Updated ' + new Date(D.updated).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
-
-  const cur = D.live.find(w => w.current), done = D.live.filter(w => !w.current);
-  const last = done[done.length - 1], prev = done[done.length - 2];
-  const delta = (a, b) => { if (a == null || b == null || !b) return ''; const d = (a - b) / b * 100; return `<span class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(0)}%</span> vs w/c ${day(prev.ws)}`; };
-  R('liveTiles').innerHTML = [
-    cur && `<div class="tile live"><div class="k">This week so far</div><div class="v">${fmtInt(cur.sales)}</div><div class="s">Week starting ${day(cur.ws)}</div></div>`,
-    last && `<div class="tile"><div class="k">Last week</div><div class="v">${fmtInt(last.sales)}</div><div class="s">${prev ? delta(last.sales, prev.sales) : 'w/c ' + day(last.ws)}</div></div>`,
-    last && `<div class="tile"><div class="k">In the field last week</div><div class="v">${fmtInt(last.inField)}</div><div class="s">Sales per BA ${last.inField ? (last.sales / last.inField).toFixed(1) : '–'}</div></div>`,
-    last && `<div class="tile"><div class="k">Reliability last week</div><div class="v">${last.reliability == null ? '–' : last.reliability + '%'}</div><div class="s">${fmtInt(last.doors)} doors knocked</div></div>`,
-  ].filter(Boolean).join('') || '<div class="tile"><div class="s">No Owner IQ data for this team yet.</div></div>';
 
   const W = D.weeks, sel = R('week');
   if (!W.length) return;
@@ -448,7 +434,7 @@ function renderTeam(D) {
   }
   let sortKey = 'pay', sortDir = -1;
   const cols = [
-    { k: 'name', t: 'Name' }, { k: 'now', t: 'This week', n: 1, g: 1 }, { k: 'lastw', t: 'Last week', n: 1 },
+    { k: 'name', t: 'Name' },
     { k: 'sales', t: 'Paid sales', n: 1, g: 1 }, { k: 'fails', t: 'Fails', n: 1 }, { k: 'fr', t: 'Fail rate', n: 1 }, { k: 'pay', t: 'Earnings', n: 1 },
     { k: 'avg', t: 'Avg / week (4 wks)', n: 1, g: 1 },
   ];
@@ -457,8 +443,7 @@ function renderTeam(D) {
     return D.members.map(m => {
       const e = m.earn[selWE] || {};
       const worked = four.map(we => m.earn[we]).filter(x => x && (x.sales || x.pay));
-      const lc = cur && cur.members[m.id], ll = last && last.members[m.id];
-      return { ...m, now: lc ? lc.sales : null, lastw: ll ? ll.sales : null, sales: e.sales ?? null, fails: e.fails ?? null,
+      return { ...m, sales: e.sales ?? null, fails: e.fails ?? null,
         fr: e.sales != null ? pct(e.fails, e.sales) : null, pay: e.pay ?? null,
         avg: worked.length ? worked.reduce((a, x) => a + x.pay, 0) / worked.length : null };
     });
@@ -472,11 +457,10 @@ function renderTeam(D) {
       if (x == null) return 1; if (y == null) return -1; return sortDir * (x - y);
     });
     const dash = '<span class="dim">–</span>';
-    tb.tHead.innerHTML = `<tr><th></th><th class="n grp" colspan="2">Owner IQ</th><th class="n grp" colspan="4">Earnings w/e ${day(selWE)}</th><th class="grp"></th></tr><tr>` +
+    tb.tHead.innerHTML = `<tr><th></th><th class="n grp" colspan="4">Earnings w/e ${day(selWE)}</th><th class="grp"></th></tr><tr>` +
       cols.map(c => `<th class="${c.n ? 'n' : ''}${c.g ? ' grp' : ''}"><button data-k="${c.k}" ${sortKey === c.k ? `aria-sort="${sortDir > 0 ? 'ascending' : 'descending'}"` : ''}>${c.t}</button></th>`).join('') + '</tr>';
     tb.tBodies[0].innerHTML = list.map(r => `<tr>
-      <td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc([r.sub, r.stage].filter(Boolean).join(' · '))}</small></div></td>
-      <td class="n grp">${r.now ?? dash}</td><td class="n">${r.lastw ?? dash}</td>
+      <td><div class="who"><span>${esc(r.name)}${r.leader ? '<span class="lead">Leader</span>' : ''}</span><small>${esc(r.sub || '')}</small></div></td>
       <td class="n grp">${r.sales ?? dash}</td><td class="n">${r.fails ?? dash}</td>
       <td class="n">${r.fr == null ? dash : `<span class="pill ${failPill(r.fr)}">${fmtPct(r.fr)}</span>`}</td>
       <td class="n">${r.pay == null ? dash : fmtGBP(r.pay)}</td>
@@ -572,7 +556,7 @@ function qualityView(el, D) {
     box.querySelectorAll('.hit').forEach(r => r.onclick = () => { sel = selEl.value = vals[+r.dataset.i].key; draw(); });
   }
   function table(p) {
-    const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: [m.sub, m.stage].filter(Boolean).join(' · '), ...sum(p.weeks, we => (S.mem(m) || {})[we]) }))
+    const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: m.sub || '', ...sum(p.weeks, we => (S.mem(m) || {})[we]) }))
       .filter(r => r.first > 0).map(r => ({ ...r, kept: r[S.b], rate: rate(r), lost: Math.max(0, r.first - r[S.b]) }));
     const others = D.members.length - rows.length;
     rows.sort((a, b) => sortKey === 'name' ? sortDir * a.name.localeCompare(b.name) : (sortDir * (a[sortKey] - b[sortKey]) || a.name.localeCompare(b.name)));
@@ -662,7 +646,7 @@ function doorsView(el, D) {
     box.querySelectorAll('.hit').forEach(r => r.onclick = () => { sel = selEl.value = vals[+r.dataset.i].key; draw(); });
   }
   function table(p) {
-    const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: [m.sub, m.stage].filter(Boolean).join(' · '), ...sum(p.weeks.map(we => (m.mmp || {})[we])) }))
+    const rows = D.members.map(m => ({ name: m.name, leader: m.leader, sub: m.sub || '', ...sum(p.weeks.map(we => (m.mmp || {})[we])) }))
       .filter(r => r.sales > 0);
     const others = D.members.length - rows.length;
     rows.sort((a, b) => sortKey === 'name' ? sortDir * a.name.localeCompare(b.name) : (sortDir * ((a[sortKey] ?? -1) - (b[sortKey] ?? -1)) || a.name.localeCompare(b.name)));

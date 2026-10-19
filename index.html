@@ -381,6 +381,12 @@ async function openTeam(slug) {
 }
 // One client's slice of a team: its weeks, its BAs and its own reports only, so HelloFresh and Milkman numbers never mix.
 const CLIENT = { hf: 'HelloFresh / Green Chef', mm: 'Modern Milkman' };
+// One client's earnings sheet often arrives before the other's: drop trailing weeks this client has no figures for yet.
+function trimEmpty(weeks) {
+  let n = weeks.length;
+  while (n > 1 && !weeks[n - 1].sales && !weeks[n - 1].pay && !weeks[n - 1].fails) n--;
+  return weeks.slice(0, n);
+}
 function forClient(D, c) {
   const some = o => Object.values(o || {}).some(x => x && Object.values(x).some(Boolean));
   const dailyIds = new Set(((D.daily || {}).people || []).filter(p => p.client === c && p.id).map(p => p.id));
@@ -394,7 +400,7 @@ function forClient(D, c) {
     q4: c === 'mm' ? m.q4 : {}, mmp: c === 'mm' ? m.mmp : {}, hf2: c === 'hf' ? m.hf2 : {} }));
   const split = (D.weeks[0] || {})[c + 'Pay'] !== undefined;   // older uploads only split sales by client
   return { ...D, client: c, members, subteams: [...new Set(members.map(m => m.sub).filter(Boolean))].sort(),
-    weeks: D.weeks.map(w => ({ we: w.we, sales: w[c] || 0, fails: split ? w[c + 'Fails'] : null, pay: split ? w[c + 'Pay'] : null, active: split ? w[c + 'Active'] : null })),
+    weeks: trimEmpty(D.weeks.map(w => ({ we: w.we, sales: w[c] || 0, fails: split ? w[c + 'Fails'] : null, pay: split ? w[c + 'Pay'] : null, active: split ? w[c + 'Active'] : null }))),
     q4: c === 'mm' ? D.q4 : [], mmp: c === 'mm' ? D.mmp : [], hf2: c === 'hf' ? D.hf2 : [],
     daily: D.daily && { ...D.daily, people: D.daily.people.filter(p => p.client === c) } };
 }

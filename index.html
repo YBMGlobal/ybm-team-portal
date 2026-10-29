@@ -394,7 +394,8 @@ function forClient(D, c) {
     q4: c === 'mm' ? m.q4 : {}, mmp: c === 'mm' ? m.mmp : {}, hf2: c === 'hf' ? m.hf2 : {} }));
   const split = (D.weeks[0] || {})[c + 'Pay'] !== undefined;   // older uploads only split sales by client
   return { ...D, client: c, members, subteams: [...new Set(members.map(m => m.sub).filter(Boolean))].sort(),
-    weeks: D.weeks.map(w => ({ we: w.we, sales: w[c] || 0, fails: split ? w[c + 'Fails'] : null, pay: split ? w[c + 'Pay'] : null, active: split ? w[c + 'Active'] : null })),
+    // Leave out weeks whose earnings sheet for this client hasn't arrived yet (older uploads have no sheets list).
+    weeks: D.weeks.filter(w => !D.sheets || (D.sheets[w.we] || []).includes(c)).map(w => ({ we: w.we, sales: w[c] || 0, fails: split ? w[c + 'Fails'] : null, pay: split ? w[c + 'Pay'] : null, active: split ? w[c + 'Active'] : null })),
     q4: c === 'mm' ? D.q4 : [], mmp: c === 'mm' ? D.mmp : [], hf2: c === 'hf' ? D.hf2 : [],
     daily: D.daily && { ...D.daily, people: D.daily.people.filter(p => p.client === c) } };
 }
